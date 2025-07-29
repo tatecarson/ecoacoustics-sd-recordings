@@ -1,0 +1,36 @@
+.DS_Store
+
+# Data files
+*.csv
+*.tsv
+*.xlsx
+*.rds
+*.txt
+
+# Audio files
+*.wav
+*.mp3
+*.flac
+
+# Plots
+*.png
+*.pdf
+*.jpeg
+
+# Temporary files
+*.tmp
+*.log
+*.Rhistory
+*.RData
+
+# Backup files
+*.bak
+
+# Environment files
+*.env
+*.Rproj.user
+
+# Python cache files
+__pycache__/
+
+.github
