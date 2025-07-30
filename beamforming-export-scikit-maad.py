@@ -266,6 +266,14 @@ def analyze_and_export_best_directions(
     # Step 5: Plots of exported beams
     plot_exported_spectrograms(exported_files, nested_output_path, sample_rate)
 
+    # Step 5b: Generate individual spectrograms for HTML if needed
+    individual_spectrograms = {}
+    if generate_html_report:
+        print("Step 5b: Generating individual spectrograms for HTML...")
+        individual_spectrograms = generate_individual_spectrograms(
+            exported_files, non_selected_files if export_all_directions else [], nested_output_path, sample_rate
+        )
+
     # Step 6: Selection report
     create_selection_report(
         selected_directions, uniqueness_scores, correlation_matrix, directions, nested_output_path, exported_files
@@ -312,6 +320,7 @@ def analyze_and_export_best_directions(
             duration_seconds,
             sample_rate,
             non_selected_files if export_all_directions else [],
+            individual_spectrograms,
         )
     
     return exported_files
@@ -901,6 +910,65 @@ def plot_exported_spectrograms(exported_files, output_path, sample_rate):
     print(f"Exported spectrogram comparison saved to: {out_png}")
 
 
+def generate_individual_spectrograms(exported_files, non_selected_files, output_path, sample_rate):
+    """
+    Generate individual spectrogram images for each exported file (selected and rejected).
+    Returns a dictionary mapping file paths to their spectrogram image paths.
+    """
+    spectrograms = {}
+    all_files = exported_files + non_selected_files
+    
+    if not all_files:
+        return spectrograms
+    
+    print(f"Generating {len(all_files)} individual spectrograms...")
+    
+    # Create spectrograms subdirectory
+    spec_dir = output_path / "spectrograms"
+    spec_dir.mkdir(exist_ok=True)
+    
+    for file_path in all_files:
+        try:
+            # Load audio
+            audio, sr = sf.read(file_path)
+            if audio.ndim > 1:
+                audio = audio[:, 0]
+            
+            # Generate spectrogram
+            f, t, Sxx = signal.spectrogram(audio, sr, nperseg=1024, noverlap=512)
+            Sxx_db = 10 * np.log10(Sxx + 1e-10)
+            
+            # Create figure
+            fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+            im = ax.pcolormesh(t, f, Sxx_db, shading="gouraud", cmap="viridis")
+            
+            # Styling
+            file_stem = file_path.stem
+            ax.set_title(f"Spectrogram: {file_stem}", fontsize=14, fontweight='bold')
+            ax.set_xlabel("Time (s)", fontsize=12)
+            ax.set_ylabel("Frequency (Hz)", fontsize=12)
+            ax.set_ylim(0, min(8000, sr // 2))
+            
+            # Add colorbar
+            cbar = plt.colorbar(im, ax=ax)
+            cbar.set_label("Power (dB)", fontsize=12)
+            
+            # Save individual spectrogram
+            spec_filename = f"{file_stem}_spectrogram.png"
+            spec_path = spec_dir / spec_filename
+            plt.savefig(spec_path, dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            # Store relative path for HTML
+            spectrograms[file_path] = f"spectrograms/{spec_filename}"
+            
+        except Exception as e:
+            print(f"Error generating spectrogram for {file_path.name}: {e}")
+    
+    print(f"Individual spectrograms saved to: {spec_dir}")
+    return spectrograms
+
+
 def create_html_report(
     input_file,
     output_path,
@@ -913,6 +981,7 @@ def create_html_report(
     duration_seconds,
     sample_rate,
     non_selected_files=None,
+    individual_spectrograms=None,
 ):
     """
     Create an interactive HTML report for the analysis results.
@@ -925,6 +994,7 @@ def create_html_report(
     score_lookup = {s["direction"]: s for s in uniqueness_scores}
     non_selected_files = non_selected_files or []
     non_selected_directions = [d for d in directions if d not in selected_directions]
+    individual_spectrograms = individual_spectrograms or {}
     
     # Read and encode images as base64
     def encode_image(image_path):
@@ -1117,7 +1187,50 @@ def create_html_report(
             font-weight: bold;
             font-size: 0.9em;
         }}
+        .spectrogram-container {{
+            margin: 15px 0;
+            text-align: center;
+        }}
+        .spectrogram-container img {{
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }}
+        .spectrogram-toggle {{
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }}
+        .spectrogram-toggle:hover {{
+            background: #2980b9;
+        }}
+        .spectrogram-content {{
+            display: none;
+            margin-top: 10px;
+        }}
+        .spectrogram-content.show {{
+            display: block;
+        }}
     </style>
+    <script>
+        function toggleSpectrogram(id) {{
+            const content = document.getElementById(id);
+            const button = content.previousElementSibling;
+            if (content.classList.contains('show')) {{
+                content.classList.remove('show');
+                button.textContent = 'Show Spectrogram';
+            }} else {{
+                content.classList.add('show');
+                button.textContent = 'Hide Spectrogram';
+            }}
+        }}
+    </script>
 </head>
 <body>
     <div class="container">
@@ -1179,6 +1292,8 @@ def create_html_report(
     for i, file_path in enumerate(exported_files):
         direction = selected_directions[i]
         score_data = score_lookup[direction]
+        spec_id = f"spec_selected_{i}"
+        
         html_content += f"""
                 <div class="audio-item">
                     <h4>Direction: {direction.upper()}</h4>
@@ -1197,7 +1312,20 @@ def create_html_report(
                             Acoustic: {score_data['acoustic_complexity']:.3f} | 
                             Spatial: {score_data['spatial_uniqueness']:.3f}
                         </small>
-                    </div>
+                    </div>"""
+        
+        # Add spectrogram if available
+        if file_path in individual_spectrograms:
+            spec_path = individual_spectrograms[file_path]
+            html_content += f"""
+                    <div class="spectrogram-container">
+                        <button class="spectrogram-toggle" onclick="toggleSpectrogram('{spec_id}')">Show Spectrogram</button>
+                        <div id="{spec_id}" class="spectrogram-content">
+                            <img src="{spec_path}" alt="Spectrogram for {direction}">
+                        </div>
+                    </div>"""
+        
+        html_content += """
                 </div>"""
 
     html_content += """
@@ -1236,12 +1364,13 @@ def create_html_report(
                     rejection_reasons[direction] = "Exceeded maximum exports limit"
 
         # Add audio players for each rejected file
-        for file_path in non_selected_files:
+        for i, file_path in enumerate(non_selected_files):
             # Extract direction from filename (remove 'rejected_' prefix and duration suffix)
             filename = file_path.name
             direction = filename.replace('rejected_', '').replace(f'_{duration_seconds}s.wav', '')
             score_data = score_lookup[direction]
             reason = rejection_reasons.get(direction, "Unknown reason")
+            spec_id = f"spec_rejected_{i}"
             
             html_content += f"""
                 <div class="rejected-item">
@@ -1262,7 +1391,20 @@ def create_html_report(
                             Acoustic: {score_data['acoustic_complexity']:.3f} | 
                             Spatial: {score_data['spatial_uniqueness']:.3f}
                         </small>
-                    </div>
+                    </div>"""
+            
+            # Add spectrogram if available
+            if file_path in individual_spectrograms:
+                spec_path = individual_spectrograms[file_path]
+                html_content += f"""
+                    <div class="spectrogram-container">
+                        <button class="spectrogram-toggle" onclick="toggleSpectrogram('{spec_id}')">Show Spectrogram</button>
+                        <div id="{spec_id}" class="spectrogram-content">
+                            <img src="{spec_path}" alt="Spectrogram for {direction}">
+                        </div>
+                    </div>"""
+            
+            html_content += """
                 </div>"""
 
         html_content += """

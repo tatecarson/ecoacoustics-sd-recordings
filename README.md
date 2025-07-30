@@ -123,6 +123,44 @@ This framework uses ecoacoustic indices not only for long‑term monitoring but 
 
 ---
 
+## How the Uniqueness Score is Computed
+
+Each beam (direction) is evaluated using a **uniqueness score** that combines several normalized ecoacoustic indices and a spatial redundancy measure. The uniqueness score is a weighted sum of the following components, each normalized across all beams:
+
+- **Spectral Activity (Hf):** Normalized spectral entropy, representing the evenness of energy across frequencies.
+- **Frequency Diversity (ADI):** Normalized Acoustic Diversity Index, reflecting the distribution of energy across frequency bands.
+- **Temporal Complexity (1 – Ht):** Inverted and normalized temporal entropy, so that lower entropy (more temporal structure) increases the score.
+- **Acoustic Complexity (ACI):** Normalized Acoustic Complexity Index, highlighting modulated, articulated signals.
+- **Spatial Uniqueness:** 1 minus the mean absolute correlation to all other beams, normalized. This penalizes beams that are highly redundant with others.
+
+The formula is:
+
+```
+uniqueness_score = w₁·Hf_norm + w₂·ADI_norm + w₃·(1–Ht_norm) + w₄·ACI_norm + w₅·spatial_uniqueness_norm
+```
+
+where the weights (w₁–w₅) are set in the script and sum to 1.0 by default.
+
+**Interpretation:**  
+A higher uniqueness score means the beam is more distinct in its spectral, temporal, and spatial characteristics compared to other beams. This helps prioritize beams that are both ecologically and creatively interesting, while avoiding redundant or similar perspectives.
+
+---
+
+## How Correlation is Computed and What It Means
+
+**Correlation** in this context measures the similarity between the time-series waveforms of different beams (directions). For every pair of beams, the Pearson correlation coefficient is calculated between their audio signals. This results in a correlation matrix, where each value ranges from −1 (perfectly inverted) to +1 (identical), and 0 means no linear relationship.
+
+- **High correlation (close to 1 or −1):** The two beams capture very similar (or inverted) audio content, indicating redundancy.
+- **Low correlation (close to 0):** The beams are acoustically distinct, capturing different spatial perspectives.
+
+**Usage in Selection:**  
+During beam selection, a maximum allowed correlation threshold is enforced. If a candidate beam is too highly correlated with any already-selected beam (i.e., their absolute correlation exceeds the threshold), it is rejected to ensure the exported set covers diverse, non-redundant perspectives.
+
+The **spatial uniqueness** component of the uniqueness score is also derived from correlation:  
+For each beam, spatial uniqueness is calculated as `1 − mean(|corr|)` to all other beams, then normalized. This rewards beams that are less similar to the rest of the field.
+
+---
+
 ## Interpreting Results (For Creative Practice)
 
 * **High ACI:** articulated gestures; use for rhythmic motifs or triggers.
