@@ -1,6 +1,5 @@
 from pathlib import Path
 import warnings
-
 import soundfile as sf
 
 from ambisonic_beamforming import AmbisonicBeamformer
