@@ -1,0 +1,27 @@
+# Grid and direction settings
+GRID_MODE = "fibonacci"   # "latlong", "fibonacci", or "beamformer_default"
+AZ_STEP_DEG = 30
+EL_PLANES_DEG = (-45, 0, 45)
+INCLUDE_POLES = True
+FIBONACCI_COUNT = 128
+
+# Selection constraints
+USE_CORRELATION_FILTER = True
+CORRELATION_THRESHOLD = 0.70
+USE_MIN_ANGLE_FILTER = True
+MIN_ANGULAR_SEPARATION_DEG = 30.0
+
+# Export/analysis defaults
+DEFAULT_DURATION_SECONDS = 30
+DEFAULT_START_TIME = 0
+MAX_EXPORTS = 5
+MIN_UNIQUENESS_THRESHOLD = 0.30
+GENERATE_HTML_REPORT = False
+EXPORT_ALL_DIRECTIONS = False
+
+# Uniqueness score weights
+W_ACTIVITY = 0.20
+W_FREQDIV = 0.20
+W_TEMP = 0.20
+W_ACI = 0.20
+W_SPATIAL = 0.20
