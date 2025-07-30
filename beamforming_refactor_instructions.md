@@ -14,6 +14,8 @@ Move these functions:
 **Purpose:**
 Provides utilities for generating and working with direction grids and vectors.
 
+[x] - Done 
+
 ---
 
 ## 2. Analysis Helpers (`beamforming_analysis.py`)
@@ -25,6 +27,8 @@ Move these functions:
 **Purpose:**
 Handles all ecoacoustic index calculations, correlation analysis, and direction selection logic.
 
+[x] - Done 
+
 ---
 
 ## 3. Export Helpers (`beamforming_export.py`)
@@ -34,6 +38,8 @@ Move these functions:
 
 **Purpose:**
 Handles exporting mono WAVs for selected and non-selected directions.
+
+[x] - Done 
 
 ---
 
