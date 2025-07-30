@@ -50,6 +50,8 @@ DEFAULT_DURATION_SECONDS = 30
 DEFAULT_START_TIME = 5
 MAX_EXPORTS = 5
 MIN_UNIQUENESS_THRESHOLD = 0.30
+GENERATE_HTML_REPORT = False
+EXPORT_ALL_DIRECTIONS = False
 
 
 # =========================
@@ -128,6 +130,8 @@ def analyze_and_export_best_directions(
     use_min_angle_filter=USE_MIN_ANGLE_FILTER,
     min_angular_separation_deg=MIN_ANGULAR_SEPARATION_DEG,
     grid_mode=GRID_MODE,
+    generate_html_report=GENERATE_HTML_REPORT,
+    export_all_directions=EXPORT_ALL_DIRECTIONS,
 ):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -238,6 +242,18 @@ def analyze_and_export_best_directions(
         beamformed_audio, directions, selected_directions, nested_output_path, duration_seconds, sample_rate
     )
 
+    # Step 4b: Export non-selected directions if requested
+    all_exported_files = exported_files.copy()
+    non_selected_files = []
+    if export_all_directions:
+        non_selected_directions = [d for d in directions if d not in selected_directions]
+        if non_selected_directions:
+            print(f"Step 4b: Exporting {len(non_selected_directions)} non-selected directions...")
+            non_selected_files = export_non_selected_directions(
+                beamformed_audio, directions, non_selected_directions, nested_output_path, duration_seconds, sample_rate
+            )
+            all_exported_files.extend(non_selected_files)
+
     # Step 4a: Exported-beams CSV by subsetting cached indices (no recomputation)
     if selected_directions:
         exported_df = indices_df_all[indices_df_all["direction"].isin(selected_directions)].copy()
@@ -280,6 +296,24 @@ def analyze_and_export_best_directions(
     print("\nANALYSIS COMPLETE")
     print(f"Results saved to: {nested_output_path.absolute()}")
     print(f"{len(exported_files)} optimized files ready for ecoacoustic analysis")
+    
+    # Step 8: Generate HTML report if requested
+    if generate_html_report:
+        print("Step 8: Generating interactive HTML report...")
+        create_html_report(
+            input_file,
+            nested_output_path,
+            exported_files,
+            selected_directions,
+            uniqueness_scores,
+            indices_df_all,
+            correlation_matrix,
+            directions,
+            duration_seconds,
+            sample_rate,
+            non_selected_files if export_all_directions else [],
+        )
+    
     return exported_files
 
 
@@ -601,6 +635,27 @@ def export_selected_directions(
     return exported_files
 
 
+def export_non_selected_directions(
+    beamformed_audio, directions, non_selected_directions, output_path, duration_seconds, sample_rate
+):
+    """Export the non-selected directions as mono WAV files with 'rejected_' prefix."""
+    exported_files = []
+    dir_to_idx = {direction: i for i, direction in enumerate(directions)}
+    for direction in non_selected_directions:
+        idx = dir_to_idx[direction]
+        filename = f"rejected_{direction}_{duration_seconds}s.wav"
+        filepath = output_path / filename
+        direction_audio = beamformed_audio[:, idx]
+        max_val = np.max(np.abs(direction_audio))
+        if max_val > 0:
+            direction_audio = direction_audio / max_val * 0.95
+        sf.write(filepath, direction_audio, sample_rate)
+        exported_files.append(filepath)
+        rms_level = np.sqrt(np.mean(direction_audio**2))
+        print(f"  {direction}: {filename} (RMS: {rms_level:.4f}) [REJECTED]")
+    return exported_files
+
+
 def create_selection_report(
     selected_directions, uniqueness_scores, correlation_matrix, all_directions, output_path, exported_files
 ):
@@ -846,6 +901,483 @@ def plot_exported_spectrograms(exported_files, output_path, sample_rate):
     print(f"Exported spectrogram comparison saved to: {out_png}")
 
 
+def create_html_report(
+    input_file,
+    output_path,
+    exported_files,
+    selected_directions,
+    uniqueness_scores,
+    indices_df_all,
+    correlation_matrix,
+    directions,
+    duration_seconds,
+    sample_rate,
+    non_selected_files=None,
+):
+    """
+    Create an interactive HTML report for the analysis results.
+    """
+    from datetime import datetime
+    import base64
+    
+    html_file = output_path / "analysis_report.html"
+    input_stem = Path(input_file).stem
+    score_lookup = {s["direction"]: s for s in uniqueness_scores}
+    non_selected_files = non_selected_files or []
+    non_selected_directions = [d for d in directions if d not in selected_directions]
+    
+    # Read and encode images as base64
+    def encode_image(image_path):
+        if image_path.exists():
+            with open(image_path, "rb") as img_file:
+                return base64.b64encode(img_file.read()).decode()
+        return None
+    
+    selection_analysis_b64 = encode_image(output_path / "selection_analysis.png")
+    spectrograms_b64 = encode_image(output_path / "exported_spectrograms.png")
+    
+    # Generate HTML content
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ecoacoustic Beamforming Analysis - {input_stem}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }}
+        h1, h2, h3 {{
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 40px;
+        }}
+        .analysis-params {{
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }}
+        .audio-section {{
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }}
+        .audio-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }}
+        .audio-item {{
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        .audio-item h4 {{
+            margin-top: 0;
+            color: #e74c3c;
+            border: none;
+            padding: 0;
+        }}
+        audio {{
+            width: 100%;
+            margin: 10px 0;
+        }}
+        .metrics-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        .metrics-table th, .metrics-table td {{
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }}
+        .metrics-table th {{
+            background-color: #34495e;
+            color: white;
+        }}
+        .metrics-table tr:nth-child(even) {{
+            background-color: #f2f2f2;
+        }}
+        .image-container {{
+            text-align: center;
+            margin: 30px 0;
+        }}
+        .image-container img {{
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }}
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }}
+        .stat-card {{
+            background: #3498db;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }}
+        .stat-card h4 {{
+            margin: 0 0 10px 0;
+            border: none;
+            padding: 0;
+            color: white;
+        }}
+        .stat-card .value {{
+            font-size: 2em;
+            font-weight: bold;
+        }}
+        .footer {{
+            margin-top: 40px;
+            text-align: center;
+            color: #7f8c8d;
+            border-top: 1px solid #bdc3c7;
+            padding-top: 20px;
+        }}
+        .param-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }}
+        .param-item {{
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }}
+        .param-item strong {{
+            color: #2c3e50;
+        }}
+        .direction-badge {{
+            display: inline-block;
+            background: #e74c3c;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin: 2px;
+        }}
+        .rejected-badge {{
+            display: inline-block;
+            background: #95a5a6;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            margin: 2px;
+        }}
+        .rejected-section {{
+            background: #f8f8f8;
+            border-left: 4px solid #95a5a6;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+        }}
+        .rejected-item {{
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #bdc3c7;
+        }}
+        .rejected-item h4 {{
+            margin-top: 0;
+            color: #7f8c8d;
+            border: none;
+            padding: 0;
+        }}
+        .reason-text {{
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 0.9em;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 Ecoacoustic Beamforming Analysis Report</h1>
+            <h2>{input_stem}</h2>
+            <p>Generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+        </div>
+
+        <div class="analysis-params">
+            <h3>📊 Analysis Parameters</h3>
+            <div class="param-grid">
+                <div class="param-item">
+                    <strong>Duration:</strong> {duration_seconds}s
+                </div>
+                <div class="param-item">
+                    <strong>Grid Mode:</strong> {GRID_MODE}
+                </div>
+                <div class="param-item">
+                    <strong>Max Exports:</strong> {MAX_EXPORTS}
+                </div>
+                <div class="param-item">
+                    <strong>Min Uniqueness:</strong> {MIN_UNIQUENESS_THRESHOLD}
+                </div>
+                <div class="param-item">
+                    <strong>Correlation Threshold:</strong> {CORRELATION_THRESHOLD}
+                </div>
+                <div class="param-item">
+                    <strong>Sample Rate:</strong> {sample_rate} Hz
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h4>Total Directions</h4>
+                <div class="value">{len(directions)}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Selected Directions</h4>
+                <div class="value">{len(selected_directions)}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Exported Files</h4>
+                <div class="value">{len(exported_files)}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Analysis Duration</h4>
+                <div class="value">{duration_seconds}s</div>
+            </div>
+        </div>
+
+        <div class="audio-section">
+            <h3>🔊 Selected Direction Audio Files</h3>
+            <p>Listen to the exported beamformed audio for each selected direction:</p>
+            <div class="audio-grid">"""
+
+    # Add audio players for each exported file
+    for i, file_path in enumerate(exported_files):
+        direction = selected_directions[i]
+        score_data = score_lookup[direction]
+        html_content += f"""
+                <div class="audio-item">
+                    <h4>Direction: {direction.upper()}</h4>
+                    <audio controls preload="metadata">
+                        <source src="{file_path.name}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <p><strong>Uniqueness Score:</strong> {score_data['total_score']:.4f}</p>
+                    <p><strong>RMS Power:</strong> {score_data['rms_power']:.4f}</p>
+                    <div>
+                        <small>
+                            <strong>Components:</strong><br>
+                            Activity: {score_data['activity_variation']:.3f} | 
+                            Frequency: {score_data['frequency_diversity']:.3f} | 
+                            Temporal: {score_data['temporal_complexity']:.3f} | 
+                            Acoustic: {score_data['acoustic_complexity']:.3f} | 
+                            Spatial: {score_data['spatial_uniqueness']:.3f}
+                        </small>
+                    </div>
+                </div>"""
+
+    html_content += """
+            </div>
+        </div>"""
+
+    # Add rejected directions section if they exist
+    if non_selected_files:
+        html_content += """
+        <div class="rejected-section">
+            <h3>❌ Rejected Direction Audio Files</h3>
+            <p>These directions were not selected due to low uniqueness scores, high correlation with selected directions, or exceeding the maximum export limit:</p>
+            <div class="audio-grid">"""
+
+        # Get rejection reasons for each non-selected direction
+        rejection_reasons = {}
+        for direction in non_selected_directions:
+            score_data = score_lookup[direction]
+            if score_data["total_score"] < MIN_UNIQUENESS_THRESHOLD:
+                rejection_reasons[direction] = f"Low uniqueness score ({score_data['total_score']:.3f})"
+            else:
+                # Check correlation with selected directions
+                dir_to_idx = {d: i for i, d in enumerate(directions)}
+                dir_idx = dir_to_idx[direction]
+                max_corr = 0
+                corr_with = ""
+                for sel_dir in selected_directions:
+                    sel_idx = dir_to_idx[sel_dir]
+                    corr = abs(correlation_matrix[dir_idx, sel_idx])
+                    if corr > max_corr:
+                        max_corr = corr
+                        corr_with = sel_dir
+                if max_corr > CORRELATION_THRESHOLD:
+                    rejection_reasons[direction] = f"Too correlated with {corr_with} (r={max_corr:.3f})"
+                else:
+                    rejection_reasons[direction] = "Exceeded maximum exports limit"
+
+        # Add audio players for each rejected file
+        for file_path in non_selected_files:
+            # Extract direction from filename (remove 'rejected_' prefix and duration suffix)
+            filename = file_path.name
+            direction = filename.replace('rejected_', '').replace(f'_{duration_seconds}s.wav', '')
+            score_data = score_lookup[direction]
+            reason = rejection_reasons.get(direction, "Unknown reason")
+            
+            html_content += f"""
+                <div class="rejected-item">
+                    <h4>Direction: {direction.upper()} <span class="rejected-badge">REJECTED</span></h4>
+                    <audio controls preload="metadata">
+                        <source src="{file_path.name}" type="audio/wav">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <p class="reason-text">Rejection Reason: {reason}</p>
+                    <p><strong>Uniqueness Score:</strong> {score_data['total_score']:.4f}</p>
+                    <p><strong>RMS Power:</strong> {score_data['rms_power']:.4f}</p>
+                    <div>
+                        <small>
+                            <strong>Components:</strong><br>
+                            Activity: {score_data['activity_variation']:.3f} | 
+                            Frequency: {score_data['frequency_diversity']:.3f} | 
+                            Temporal: {score_data['temporal_complexity']:.3f} | 
+                            Acoustic: {score_data['acoustic_complexity']:.3f} | 
+                            Spatial: {score_data['spatial_uniqueness']:.3f}
+                        </small>
+                    </div>
+                </div>"""
+
+        html_content += """
+            </div>
+        </div>"""
+
+    html_content += """
+
+        <h3>📈 Analysis Results Overview</h3>"""
+
+    # Add selection analysis visualization
+    if selection_analysis_b64:
+        html_content += f"""
+        <div class="image-container">
+            <h4>Selection Analysis Visualization</h4>
+            <img src="data:image/png;base64,{selection_analysis_b64}" alt="Selection Analysis">
+        </div>"""
+
+    # Add exported spectrograms
+    if spectrograms_b64:
+        html_content += f"""
+        <div class="image-container">
+            <h4>Exported Direction Spectrograms</h4>
+            <img src="data:image/png;base64,{spectrograms_b64}" alt="Exported Spectrograms">
+        </div>"""
+
+    # Add detailed metrics table for selected directions
+    if selected_directions:
+        selected_df = indices_df_all[indices_df_all["direction"].isin(selected_directions)].copy()
+        html_content += """
+        <h3>📋 Detailed Metrics (Selected Directions)</h3>
+        <table class="metrics-table">
+            <tr>
+                <th>Direction</th>
+                <th>ACI</th>
+                <th>ADI</th>
+                <th>Hf</th>
+                <th>Ht</th>
+                <th>Total Score</th>
+                <th>RMS Power</th>
+            </tr>"""
+        
+        for _, row in selected_df.iterrows():
+            html_content += f"""
+            <tr>
+                <td><span class="direction-badge">{row['direction']}</span></td>
+                <td>{row['ACI']:.4f}</td>
+                <td>{row['ADI']:.4f}</td>
+                <td>{row['Hf']:.4f}</td>
+                <td>{row['Ht']:.4f}</td>
+                <td>{row['total_score']:.4f}</td>
+                <td>{row['rms_power']:.4f}</td>
+            </tr>"""
+        
+        html_content += """
+        </table>"""
+
+    # Add weight configuration info
+    html_content += f"""
+        <h3>⚖️ Uniqueness Score Weights</h3>
+        <div class="param-grid">
+            <div class="param-item">
+                <strong>Activity (Hf):</strong> {W_ACTIVITY:.2f}
+            </div>
+            <div class="param-item">
+                <strong>Frequency Diversity (ADI):</strong> {W_FREQDIV:.2f}
+            </div>
+            <div class="param-item">
+                <strong>Temporal Complexity (1-Ht):</strong> {W_TEMP:.2f}
+            </div>
+            <div class="param-item">
+                <strong>Acoustic Complexity (ACI):</strong> {W_ACI:.2f}
+            </div>
+            <div class="param-item">
+                <strong>Spatial Uniqueness:</strong> {W_SPATIAL:.2f}
+            </div>
+        </div>
+
+        <h3>📁 Generated Files</h3>
+        <ul>
+            <li>📊 <code>maad_indices_all_directions.csv</code> - Complete indices for all directions</li>
+            <li>📊 <code>maad_indices.csv</code> - Indices for selected/exported directions</li>
+            <li>📈 <code>selection_analysis.png</code> - Comprehensive analysis visualization</li>
+            <li>📈 <code>exported_spectrograms.png</code> - Spectrogram comparison</li>
+            <li>📄 <code>selection_report.txt</code> - Detailed text report</li>
+            <li>📊 <code>correlation_matrix.csv</code> - Direction correlation data</li>"""
+
+    for file_path in exported_files:
+        html_content += f"""
+            <li>🎵 <code>{file_path.name}</code> - Beamformed audio file (SELECTED)</li>"""
+
+    # Add rejected files to the listing if they exist
+    for file_path in non_selected_files:
+        html_content += f"""
+            <li>🎵 <code>{file_path.name}</code> - Beamformed audio file (REJECTED)</li>"""
+
+    html_content += f"""
+        </ul>
+
+        <div class="footer">
+            <p>Generated by Ecoacoustic Beamforming Analysis Script</p>
+            <p>Input file: <code>{input_file}</code></p>
+        </div>
+    </div>
+</body>
+</html>"""
+
+    # Write HTML file
+    with open(html_file, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+    
+    print(f"Interactive HTML report saved to: {html_file}")
+    return html_file
+
+
 # =========================
 # Entry point
 # =========================
@@ -870,6 +1402,16 @@ if __name__ == "__main__":
         type=str,
         default="ecoacoustic_analysis",
         help="Output directory for analysis results."
+    )
+    parser.add_argument(
+        "--html_report",
+        action="store_true",
+        help="Generate interactive HTML report for each processed file."
+    )
+    parser.add_argument(
+        "--export_all",
+        action="store_true",
+        help="Export both selected and rejected directions. Rejected files are prefixed with 'rejected_'."
     )
     args = parser.parse_args()
 
@@ -907,6 +1449,8 @@ if __name__ == "__main__":
                 use_min_angle_filter=USE_MIN_ANGLE_FILTER,
                 min_angular_separation_deg=MIN_ANGULAR_SEPARATION_DEG,
                 grid_mode=GRID_MODE,
+                generate_html_report=args.html_report,
+                export_all_directions=args.export_all,
             )
 
             if exported_files:
