@@ -19,14 +19,17 @@ MIN_UNIQUENESS_THRESHOLD = 0.30
 GENERATE_HTML_REPORT = False
 EXPORT_ALL_DIRECTIONS = False
 
-# Uniqueness score weights
-W_ACTIVITY = 0.20
-W_FREQDIV = 0.20
-W_TEMP = 0.20
-W_ACI = 0.20
-W_SPATIAL = 0.20
+# Uniqueness score weights (should sum to 1.0)
+W_ACTIVITY = 0.25      # Hf (spectral entropy, normalized)
+W_FREQDIV = 0.25       # ADI (normalized)
+W_TEMP = 0.15          # 1 - Ht (normalized)
+W_ACI = 0.20           # ACI (normalized)
+W_SPATIAL = 0.15       # 1 - mean|corr| (normalized)
 
+# Indices thresholds/bands for scikit-maad
 ADI_AEI_DB_THRESHOLD = -50
+NDSI_BIO = (1000, 10000)
+NDSI_ANTH = (0, 1000)
 
 # --- Profile registry for geophony tuning ---
 PROFILE_WEIGHTS = {

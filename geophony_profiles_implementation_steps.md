@@ -139,6 +139,8 @@ python -c "import beamforming_utils.beamforming_analysis as ba; print('OK')"
 **Acceptance Criteria**
 - Module imports successfully; `profile_weights` parameter appears and is used.
 
+-- DONE -- 
+
 ---
 
 ## 5) Pass Profile ADI Threshold Into Index Calculation

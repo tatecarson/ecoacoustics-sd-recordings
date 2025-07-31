@@ -7,17 +7,10 @@ from maad import features as maad_features
 
 from beamforming_utils.beamforming_grid import  angular_separation_deg
 
-# Uniqueness score weights (should sum to 1.0)
-W_ACTIVITY = 0.25      # Hf (spectral entropy, normalized)
-W_FREQDIV = 0.25       # ADI (normalized)
-W_TEMP = 0.15          # 1 - Ht (normalized)
-W_ACI = 0.20           # ACI (normalized)
-W_SPATIAL = 0.15       # 1 - mean|corr| (normalized)
-
-# Indices thresholds/bands for scikit-maad
-ADI_AEI_DB_THRESHOLD = -50
-NDSI_BIO = (1000, 10000)
-NDSI_ANTH = (0, 1000)
+from beamforming_utils.config import (
+    W_ACTIVITY, W_FREQDIV, W_TEMP, W_ACI, W_SPATIAL,
+    ADI_AEI_DB_THRESHOLD, NDSI_BIO, NDSI_ANTH,
+)
 
 # =========================
 # Analysis helpers
@@ -35,7 +28,7 @@ def calculate_correlation_analysis(beamformed_audio, directions, output_path):
     )
     return correlation_matrix
 
-def calculate_uniqueness_metrics(beamformed_audio, directions, sample_rate):
+def calculate_uniqueness_metrics(beamformed_audio, directions, sample_rate, profile_weights=None, ADI_dB_threshold=None, preproc=None):
     """
     Compute scikit-maad indices ONCE for each direction and reuse:
       - activity_variation  -> Hf  (spectral entropy; normalized)
@@ -188,13 +181,14 @@ def calculate_uniqueness_metrics(beamformed_audio, directions, sample_rate):
     acoustic_complexity = _norm(ACI_vals)         # ACI
     spatial_uniqueness  = _norm(spatial_unique)   # spatial uniqueness
 
-    # Weighted total score
+    # Weighted total score (profile-aware)
+    w = profile_weights or {"Hf": W_ACTIVITY, "ADI": W_FREQDIV, "TEMP": W_TEMP, "ACI": W_ACI, "SPATIAL": W_SPATIAL}
     total_score = (
-        W_ACTIVITY * activity_variation
-        + W_FREQDIV * frequency_diversity
-        + W_TEMP    * temporal_complexity
-        + W_ACI     * acoustic_complexity
-        + W_SPATIAL * spatial_uniqueness
+        w["Hf"]      * activity_variation +
+        w["ADI"]     * frequency_diversity +
+        w["TEMP"]    * temporal_complexity +
+        w["ACI"]     * acoustic_complexity +
+        w["SPATIAL"] * spatial_uniqueness
     )
 
     # Pack outputs: list of dicts for selection/plots
