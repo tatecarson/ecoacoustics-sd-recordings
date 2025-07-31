@@ -1,4 +1,6 @@
 import numpy as np
+import scipy.signal as sps
+
 import pandas as pd
 import warnings
 from scipy import signal
@@ -307,3 +309,18 @@ def smart_direction_selection(
 
     print(f"\nSelected {len(selected_directions)} directions for export: {selected_directions}")
     return selected_directions
+
+# Optional pre-processing for geophony profiles
+def maybe_preprocess(x, sr, preproc):
+    if not preproc:
+        return x
+    y = x
+    if preproc.get('hpf_hz'):
+        sos = sps.butter(2, preproc['hpf_hz']/(sr*0.5), btype='highpass', output='sos')
+        y = sps.sosfiltfilt(sos, y)
+    if preproc.get('envelope_median_ms'):
+        env = np.abs(sps.hilbert(y))
+        k = max(3, int(preproc['envelope_median_ms']*1e-3*sr/256))
+        env_s = sps.medfilt(env, kernel_size=2*(k//2)+1)
+        y = y * (env_s / (env + 1e-12))
+    return y

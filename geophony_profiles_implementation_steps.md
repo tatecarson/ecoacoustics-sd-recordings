@@ -167,50 +167,242 @@ df_alpha, _ = maad.features.all_spectral_alpha_indices(
 **Acceptance Criteria**
 - ADI dB threshold now configurable via the profile parameter.
 
+-- DONE --
+
 ---
 
-## 6) Add a Small Pre-Processing Hook (Optional)
+## 6) Add and Control the Pre-Processing Hook (Revised)
+
+**Purpose:** Stabilize index calculations in geophony (wind, rain, surf/river) **without** altering the WAVs you export by default. The hook runs **only when needed**: driven by the active profile, a CLI override, or an optional auto detector.
+
+---
+
+### 6.1 Add the Hook (analysis-only)
 
 **Tasks for Agent**
-- Add lightweight preprocessing prior to index computation (HPF for wind; optional envelope median for rain).
 
-**Code to Add (in `beamforming_analysis.py`)**
+* In `beamforming_utils/beamforming_analysis.py` (or a small `preproc.py`), add the hook function.
+
+**Code to Add**
+
 ```python
-import scipy.signal as sps
+# beamforming_utils/beamforming_analysis.py
 import numpy as np
+import scipy.signal as sps
 
 def maybe_preprocess(x, sr, preproc):
+    """
+    Light, analysis-only preprocessing to reduce geophony bias in indices.
+    Keys used in `preproc`:
+      - hpf_hz: int/float or None (e.g., 60, 90, 120)
+      - envelope_median_ms: int/float or None (e.g., 15 for rain tick smoothing)
+    Do not use this on exported WAVs unless explicitly requested.
+    """
     if not preproc:
         return x
+
     y = x
-    if preproc.get('hpf_hz'):
-        sos = sps.butter(2, preproc['hpf_hz']/(sr*0.5), btype='highpass', output='sos')
+    # High-pass (wind/surf/river low-frequency rumble)
+    if preproc.get("hpf_hz"):
+        wc = preproc["hpf_hz"] / (0.5 * sr)
+        wc = min(max(wc, 1e-4), 0.9999)  # clamp numeric safety
+        sos = sps.butter(2, wc, btype="highpass", output="sos")
         y = sps.sosfiltfilt(sos, y)
-    if preproc.get('envelope_median_ms'):
+
+    # Envelope median smoothing (rain micro-impulses)
+    if preproc.get("envelope_median_ms"):
         env = np.abs(sps.hilbert(y))
-        k = max(3, int(preproc['envelope_median_ms']*1e-3*sr/256))
-        env_s = sps.medfilt(env, kernel_size=2*(k//2)+1)
+        k = max(3, int(preproc["envelope_median_ms"] * 1e-3 * sr / 256))
+        k = 2 * (k // 2) + 1  # odd
+        env_s = sps.medfilt(env, kernel_size=k)
         y = y * (env_s / (env + 1e-12))
+
     return y
 ```
 
-**Where to Use**
-```python
-beam = maybe_preprocess(beam, sample_rate, preproc)
-```
-
 **Checkpoint**
+
 ```bash
 python - <<'PY'
 import numpy as np
 from beamforming_utils.beamforming_analysis import maybe_preprocess
 x = np.random.randn(22050*2); sr=22050
-print(len(maybe_preprocess(x, sr, {"hpf_hz":120})))
+y = maybe_preprocess(x, sr, {"hpf_hz":120})
+assert len(y) == len(x)
+print("OK")
 PY
 ```
 
 **Acceptance Criteria**
-- Function executes without error and returns same-length signal.
+
+* Function imports and returns same-length arrays.
+* No runtime errors.
+
+-- DONE -- 
+
+---
+
+### 6.2 Control When It Runs (profile, CLI, auto)
+
+**Tasks for Agent**
+
+* In the **main script** (`beamforming-export-scikit-maad.py`), add CLI switches and merge them with profile params.
+
+**Add CLI arguments**
+
+```python
+parser.add_argument(
+    "--preproc",
+    choices=["off", "force", "auto"],
+    default=None,  # None => profile-driven default
+    help="Preprocess mode: off (never), force (always if params exist), auto (detect). Default: profile-driven."
+)
+# Optional explicit overrides (useful when --profile none)
+parser.add_argument("--hpf_hz", type=float, default=None)
+parser.add_argument("--envelope_median_ms", type=float, default=None)
+```
+
+**Merge CLI overrides with profile params**
+
+```python
+# after: weights, params = get_profile(args.profile)
+if args.hpf_hz is not None:
+    params["hpf_hz"] = args.hpf_hz
+if args.envelope_median_ms is not None:
+    params["envelope_median_ms"] = args.envelope_median_ms
+```
+
+**Optional: auto detector (fast heuristics)**
+
+```python
+import numpy as np
+import scipy.signal as sps
+from scipy import stats
+
+def should_preprocess_auto(x, sr, profile_name):
+    # analyze at most ~10 s for speed
+    x = x[:min(len(x), sr*10)]
+
+    # LF ratio (<120 Hz)
+    freqs = np.fft.rfftfreq(len(x), 1/sr)
+    X = np.abs(np.fft.rfft(x)) + 1e-12
+    LF_ratio = X[freqs < 120].sum() / X.sum()
+
+    # Spectral flatness (proxy for evenness / surf)
+    S_flat = np.exp(np.mean(np.log(X))) / (np.mean(X) + 1e-12)
+
+    # Envelope kurtosis (rain-ish)
+    env = np.abs(sps.hilbert(x))
+    kurt = stats.kurtosis(env)
+
+    if profile_name == "wind" and LF_ratio > 0.35:
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    if profile_name == "surf_river" and S_flat > 0.60:
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    if profile_name == "rain" and kurt > 4.0:
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    if profile_name == "geophony_general" and (LF_ratio > 0.30 or S_flat > 0.55):
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    return False, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+```
+
+**Apply hook per beam (analysis path only)**
+
+```python
+from beamforming_utils.beamforming_analysis import maybe_preprocess
+
+# inside the loop over directions/beams:
+beam_for_indices = beam  # keep original for export unless user requests otherwise
+
+# Decide whether to apply preprocessing
+if args.preproc == "force":
+    apply_preproc = True
+elif args.preproc == "off":
+    apply_preproc = False
+elif args.preproc == "auto":
+    apply_preproc, auto_metrics = should_preprocess_auto(beam, sample_rate, args.profile)
+    # stash for report provenance
+    auto_log_line = (f"AUTO-PREPROC={apply_preproc} "
+                     f"(LF_ratio={auto_metrics['LF_ratio']:.2f}, "
+                     f"S_flat={auto_metrics['S_flat']:.2f}, kurt={auto_metrics['kurt']:.2f})")
+    report_lines.append(auto_log_line)
+else:
+    # Default: profile-driven only if profile provides params
+    apply_preproc = bool(params.get("hpf_hz") or params.get("envelope_median_ms"))
+
+if apply_preproc:
+    beam_for_indices = maybe_preprocess(beam, sample_rate, params)
+
+# IMPORTANT: compute spectrogram/indices on beam_for_indices,
+# but export the ORIGINAL beam by default.
+```
+
+**Checkpoint**
+
+* `--preproc off` with `--profile wind` → no preprocessing applied.
+* `--preproc force` with `--profile none --hpf_hz 100` → preprocessing applied (HPF\@100).
+* `--preproc auto` with `--profile surf_river` on a river clip → auto logs `AUTO-PREPROC=True`.
+* `--preproc auto` on a quiet clip → auto logs `False`.
+
+**Acceptance Criteria**
+
+* Decisions match the mode selected (off/force/auto/profile).
+* No changes to default export unless an explicit “export preprocessed” flag is added.
+
+---
+
+### 6.3 Provenance in Reports
+
+**Tasks for Agent**
+
+* In `beamforming_utils/beamforming_report.py`, include preprocessing metadata at the top of `selection_report.txt`.
+
+**Report lines to add**
+
+```python
+f.write(f"PREPROC_MODE: {args.preproc or 'profile'}\n")
+f.write(f"PREPROC_PARAMS: hpf_hz={params.get('hpf_hz')}, "
+        f"envelope_median_ms={params.get('envelope_median_ms')}\n")
+# If auto used, include the decision/metrics once (e.g., averaged or sample line)
+if 'AUTO-PREPROC' in ''.join(report_lines):
+    f.write(next(line for line in report_lines if 'AUTO-PREPROC' in line) + "\n")
+```
+
+**Checkpoint**
+
+* Run a profile that sets `hpf_hz` and confirm the report shows `PREPROC_MODE` and `PREPROC_PARAMS`.
+* In `auto` mode, confirm the decision and metrics are logged.
+
+**Acceptance Criteria**
+
+* Reproducible runs: the report clearly states whether and how preprocessing was applied.
+
+---
+
+### 6.4 (Optional) Exporting Preprocessed Audio
+
+**Tasks for Agent**
+
+* Add `--export_preprocessed` to let users opt into exporting the processed beam.
+
+**Sketch**
+
+```python
+parser.add_argument("--export_preprocessed", action="store_true",
+    help="Export preprocessed beam WAVs instead of originals.")
+
+# when writing WAVs
+out_audio = beam_for_indices if args.export_preprocessed else beam
+```
+
+**Checkpoint**
+
+* Two runs on the same input (default vs `--export_preprocessed`) produce different WAVs only in the second case.
+
+**Acceptance Criteria**
+
+* Default export remains unchanged; opting in works as intended.
+
 
 ---
 
