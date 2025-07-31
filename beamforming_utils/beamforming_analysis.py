@@ -101,7 +101,7 @@ def calculate_uniqueness_metrics(beamformed_audio, directions, sample_rate, prof
                 flim_bioPh=NDSI_BIO,
                 flim_antroPh=NDSI_ANTH,
                 R_compatible="soundecology",
-                ADI_dB_threshold=ADI_AEI_DB_THRESHOLD,
+                ADI_dB_threshold=ADI_dB_threshold if ADI_dB_threshold is not None else ADI_AEI_DB_THRESHOLD,
                 AEI_dB_threshold=ADI_AEI_DB_THRESHOLD,
                 verbose=False,
                 display=False,
