@@ -21,6 +21,31 @@ def create_selection_report(
 
     with open(report_file, "w") as f:
         # --- Provenance block ---
+        f.write("PROFILE METADATA\n")
+        f.write("-" * 50 + "\n")
+        # Profile name and weights/params
+        profile_name = None
+        weights = None
+        params = None
+        if profile_params is not None:
+            # Try to extract profile_name if present in params
+            profile_name = profile_params.get('profile_name', None)
+            weights = profile_params.get('weights', None)
+            params = profile_params
+        # Fallback: try to get from globals if not present
+        if profile_name is None:
+            try:
+                from beamforming_utils.config import get_profile
+                weights, params = get_profile(profile_params.get('profile_name', 'none') if profile_params else 'none')
+                profile_name = profile_params.get('profile_name', 'none') if profile_params else 'none'
+            except Exception:
+                profile_name = 'none'
+        f.write(f"PROFILE: {profile_name}\n")
+        if weights is not None:
+            f.write(f"Weights: {weights}\n")
+        if params is not None:
+            f.write(f"Params: ADI_dB={params.get('ADI_dB')}, corr={params.get('corr')}, min_angle={params.get('min_angle')}, hpf={params.get('hpf_hz')}, envelope_median_ms={params.get('envelope_median_ms')}\n")
+        f.write("\n")
         f.write("PREPROCESSING PROVENANCE\n")
         f.write("-" * 50 + "\n")
         f.write(f"PREPROC_MODE: {preproc_mode}\n")

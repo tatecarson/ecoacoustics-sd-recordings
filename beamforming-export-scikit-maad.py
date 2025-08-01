@@ -359,8 +359,9 @@ if __name__ == "__main__":
     if args.envelope_median_ms is not None:
         params["envelope_median_ms"] = args.envelope_median_ms
     
-    # Add weights to params for convenience
+    # Add weights and profile name to params for convenience
     params["weights"] = weights
+    params["profile_name"] = profile_name
 
     # Determine files to process
     if args.input_file:
