@@ -452,6 +452,8 @@ python beamforming-export-scikit-maad.py --help
 **Acceptance Criteria**
 - CLI accepts and exposes the new option.
 
+--- DONE ---
+
 ---
 
 ## 8) Annotate the Report With Active Profile and Weights
