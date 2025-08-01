@@ -1,10 +1,13 @@
 from pathlib import Path
 import warnings
 import soundfile as sf
+import numpy as np
+import scipy.signal as sps
+from scipy import stats
 
 from ambisonic_beamforming import AmbisonicBeamformer
 from beamforming_utils.beamforming_grid import latlong_grid, fibonacci_sphere_grid, unit_vector_from_azel
-from beamforming_utils.beamforming_analysis import calculate_correlation_analysis, smart_direction_selection, calculate_uniqueness_metrics
+from beamforming_utils.beamforming_analysis import calculate_correlation_analysis, smart_direction_selection, calculate_uniqueness_metrics, maybe_preprocess
 from beamforming_utils.beamforming_export import export_selected_directions, export_non_selected_directions
 from beamforming_utils.beamforming_report import (
     create_selection_report, create_selection_visualization, plot_exported_spectrograms,
@@ -15,8 +18,13 @@ from beamforming_utils.config import (
     GRID_MODE, AZ_STEP_DEG, EL_PLANES_DEG, INCLUDE_POLES, FIBONACCI_COUNT,
     USE_CORRELATION_FILTER, CORRELATION_THRESHOLD, USE_MIN_ANGLE_FILTER, MIN_ANGULAR_SEPARATION_DEG,
     DEFAULT_DURATION_SECONDS, DEFAULT_START_TIME, MAX_EXPORTS, MIN_UNIQUENESS_THRESHOLD,
-    GENERATE_HTML_REPORT, EXPORT_ALL_DIRECTIONS
+    GENERATE_HTML_REPORT, EXPORT_ALL_DIRECTIONS, get_profile
 )
+
+# =========================
+# Preprocessing auto-detection
+# =========================
+from beamforming_utils.beamforming_analysis import should_preprocess_auto
 
 # =========================
 # Core analysis pipeline ;;
@@ -36,6 +44,9 @@ def analyze_and_export_best_directions(
     grid_mode=GRID_MODE,
     generate_html_report=GENERATE_HTML_REPORT,
     export_all_directions=EXPORT_ALL_DIRECTIONS,
+    profile_name="none",
+    preproc_mode=None,
+    profile_params=None,
 ):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -109,6 +120,36 @@ def analyze_and_export_best_directions(
 
     print(f"Beamformed to {len(directions)} directions.")
 
+    # Initialize preprocessing parameters
+    if profile_params is None:
+        profile_params = {}
+    
+    # Add preprocessing controls and auto-detection logic
+    report_lines = []
+    
+    # Determine preprocessing mode
+    if preproc_mode == "force":
+        apply_preproc = True
+    elif preproc_mode == "off":
+        apply_preproc = False
+    elif preproc_mode == "auto":
+        # Use first beam for auto-detection
+        sample_beam = beamformed_audio[:, 0] if beamformed_audio.shape[1] > 0 else np.zeros(1000)
+        apply_preproc, auto_metrics = should_preprocess_auto(sample_beam, sample_rate, profile_name)
+        auto_log_line = (f"AUTO-PREPROC={apply_preproc} "
+                        f"(LF_ratio={auto_metrics['LF_ratio']:.2f}, "
+                        f"S_flat={auto_metrics['S_flat']:.2f}, kurt={auto_metrics['kurt']:.2f})")
+        report_lines.append(auto_log_line)
+        print(f"Auto-detection: {auto_log_line}")
+    else:
+        # Default: profile-driven only if profile provides params
+        apply_preproc = bool(profile_params.get("hpf_hz") or profile_params.get("envelope_median_ms"))
+
+    if apply_preproc:
+        print(f"Preprocessing enabled: hpf_hz={profile_params.get('hpf_hz')}, envelope_median_ms={profile_params.get('envelope_median_ms')}")
+    else:
+        print("Preprocessing disabled.")
+
     # Step 1: Correlation matrix across all directions
     print("Step 1: Calculating correlation matrix...")
     correlation_matrix = calculate_correlation_analysis(beamformed_audio, directions, nested_output_path)
@@ -116,7 +157,10 @@ def analyze_and_export_best_directions(
     # Step 2: Uniqueness metrics (single pass) -> reuse everywhere
     print("Step 2: Analyzing uniqueness metrics...")
     uniqueness_scores, indices_df_all = calculate_uniqueness_metrics(
-        beamformed_audio, directions, sample_rate
+        beamformed_audio, directions, sample_rate,
+        profile_weights=profile_params.get('weights'),
+        ADI_dB_threshold=profile_params.get("ADI_dB"),
+        preproc=profile_params if apply_preproc else None
     )
 
     # Save ALL-directions CSV directly (no recomputation)
@@ -307,6 +351,15 @@ if __name__ == "__main__":
         default=None,
         help="Optional profile name (e.g., 'water') to adjust defaults."
     )
+    parser.add_argument(
+        "--preproc",
+        choices=["off", "force", "auto"],
+        default=None,  # None => profile-driven default
+        help="Preprocess mode: off (never), force (always if params exist), auto (detect). Default: profile-driven."
+    )
+    # Optional explicit overrides (useful when --profile none)
+    parser.add_argument("--hpf_hz", type=float, default=None, help="High-pass filter frequency in Hz")
+    parser.add_argument("--envelope_median_ms", type=float, default=None, help="Envelope median filter duration in ms")
     args = parser.parse_args()
 
     # Set pool_alpha default for 'water' profile if not explicitly provided
@@ -314,6 +367,19 @@ if __name__ == "__main__":
         args.pool_alpha = 0.3
     elif args.pool_alpha is None:
         args.pool_alpha = 0.5
+
+    # Handle geophony profiles and CLI overrides
+    profile_name = args.profile or "none"
+    weights, params = get_profile(profile_name)
+    
+    # Merge CLI overrides with profile params
+    if args.hpf_hz is not None:
+        params["hpf_hz"] = args.hpf_hz
+    if args.envelope_median_ms is not None:
+        params["envelope_median_ms"] = args.envelope_median_ms
+    
+    # Add weights to params for convenience
+    params["weights"] = weights
 
     # Determine files to process
     if args.input_file:
@@ -344,13 +410,16 @@ if __name__ == "__main__":
                 start_time=DEFAULT_START_TIME,
                 max_exports=MAX_EXPORTS,
                 min_uniqueness_threshold=MIN_UNIQUENESS_THRESHOLD,
-                correlation_threshold=CORRELATION_THRESHOLD,
+                correlation_threshold=params.get("corr", CORRELATION_THRESHOLD),
                 use_correlation_filter=USE_CORRELATION_FILTER,
                 use_min_angle_filter=USE_MIN_ANGLE_FILTER,
-                min_angular_separation_deg=MIN_ANGULAR_SEPARATION_DEG,
+                min_angular_separation_deg=params.get("min_angle", MIN_ANGULAR_SEPARATION_DEG),
                 grid_mode=GRID_MODE,
                 generate_html_report=args.html_report,
                 export_all_directions=args.export_all,
+                profile_name=profile_name,
+                preproc_mode=args.preproc,
+                profile_params=params,
             )
 
             if exported_files:

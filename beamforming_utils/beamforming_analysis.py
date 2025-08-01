@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.signal as sps
-
+from scipy import stats
 import pandas as pd
 import warnings
 from scipy import signal
@@ -324,3 +324,33 @@ def maybe_preprocess(x, sr, preproc):
         env_s = sps.medfilt(env, kernel_size=2*(k//2)+1)
         y = y * (env_s / (env + 1e-12))
     return y
+
+# =========================
+# Preprocessing auto-detection
+# =========================
+def should_preprocess_auto(x, sr, profile_name):
+    """Auto-detect if preprocessing should be applied based on audio characteristics."""
+    # analyze at most ~10 s for speed
+    x = x[:min(len(x), sr*10)]
+
+    # LF ratio (<120 Hz)
+    freqs = np.fft.rfftfreq(len(x), 1/sr)
+    X = np.abs(np.fft.rfft(x)) + 1e-12
+    LF_ratio = X[freqs < 120].sum() / X.sum()
+
+    # Spectral flatness (proxy for evenness / surf)
+    S_flat = np.exp(np.mean(np.log(X))) / (np.mean(X) + 1e-12)
+
+    # Envelope kurtosis (rain-ish)
+    env = np.abs(sps.hilbert(x))
+    kurt = stats.kurtosis(env)
+
+    if profile_name == "wind" and LF_ratio > 0.35:
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    if profile_name == "surf_river" and S_flat > 0.60:
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    if profile_name == "rain" and kurt > 4.0:
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    if profile_name == "geophony_general" and (LF_ratio > 0.30 or S_flat > 0.55):
+        return True, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
+    return False, dict(LF_ratio=LF_ratio, S_flat=S_flat, kurt=kurt)
