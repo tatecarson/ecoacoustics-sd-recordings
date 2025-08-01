@@ -37,6 +37,16 @@ It is not a biodiversity survey tool. Instead, it uses ecological signal descrip
 ---
 
 ## Geophony Profiles
+### Profile Auto-Suggestion Only
+
+You can quickly get a profile suggestion for any 9-channel ambisonic WAV without running the full analysis pipeline using:
+
+```bash
+python beamforming-export-scikit-maad.py --input_file yourfile.wav --suggest-profile-only
+```
+
+This prints the suggested profile, confidence, and feature values, then exits. Useful for previewing which geophony profile the script would recommend for a given file.
+
 
 The pipeline includes **geophony profiles** that optimize ecoacoustic analysis for different natural soundscape contexts. These profiles adjust index weights, thresholds, and preprocessing to better handle environmental sounds like wind, rain, rivers, and thunder.
 
@@ -68,6 +78,9 @@ Profiles reweight the uniqueness score components to emphasize different acousti
 ```bash
 # Use wind profile for windy recordings
 python beamforming-export-scikit-maad.py --input_file windy_forest.wav --profile wind
+
+# Get a profile suggestion only (no analysis)
+python beamforming-export-scikit-maad.py --input_file test-30s.wav --suggest-profile-only
 
 # Compare profiles on the same recording
 python beamforming-export-scikit-maad.py --input_file stream.wav --profile surf_river --output_dir out_river
