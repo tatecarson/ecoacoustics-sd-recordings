@@ -22,9 +22,9 @@ from beamforming_utils.config import (
 )
 
 # =========================
-# Preprocessing auto-detection
+# Profile suggestion
 # =========================
-from beamforming_utils.beamforming_analysis import should_preprocess_auto
+from beamforming_utils.beamforming_analysis import suggest_profile
 
 # =========================
 # Core analysis pipeline ;;
@@ -47,6 +47,7 @@ def analyze_and_export_best_directions(
     profile_name="none",
     preproc_mode=None,
     profile_params=None,
+    suggest_profile_mode=None,
 ):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
@@ -89,6 +90,28 @@ def analyze_and_export_best_directions(
     # Extract segment
     audio_segment = audio[start_sample:end_sample]
     print(f"Analyzing {audio_segment.shape[0]/sample_rate:.1f} seconds starting at {start_time}s\n")
+    
+    # Profile suggestion (if enabled)
+    report_lines = []
+    if suggest_profile_mode in ["always", "if_none"]:
+        # Get initial beam for analysis (use forward direction)
+        forward_beam = beamformer.beamform(audio_segment, [(0, 0)])  # Single direction: forward
+        forward_beam = forward_beam.squeeze()  # Remove singleton dimension since we only have one direction
+        
+        suggested_profile, confidence, features = suggest_profile(forward_beam, sample_rate)
+        
+        report_lines.extend([
+            f"PROFILE SUGGESTION:",
+            f"  Suggested: {suggested_profile} (confidence: {confidence:.2f})",
+            f"  Features: {', '.join(f'{k}={v:.3f}' for k, v in features.items())}"
+        ])
+        
+        # Only override if using 'none' profile and suggestion requested
+        if profile_name == "none" and suggest_profile_mode == "always":
+            profile_name = suggested_profile
+            report_lines.append(f"  Applied: Using suggested profile '{suggested_profile}'")
+        else:
+            report_lines.append(f"  Applied: Keeping user-specified profile '{profile_name}'")
 
     # Prepare direction grid (if supported)
     azel_list = None
@@ -135,10 +158,22 @@ def analyze_and_export_best_directions(
     elif preproc_mode == "auto":
         # Use first beam for auto-detection
         sample_beam = beamformed_audio[:, 0] if beamformed_audio.shape[1] > 0 else np.zeros(1000)
-        apply_preproc, auto_metrics = should_preprocess_auto(sample_beam, sample_rate, profile_name)
+        # Use the suggest_profile function to determine if preprocessing is needed
+        _, _, features = suggest_profile(sample_beam, sample_rate)
+        lf_ratio = features['lf_ratio']
+        s_flat = features['spectral_flatness']
+        env_kurt = features['envelope_kurtosis']
+        
+        # Decision rules for preprocessing
+        apply_preproc = (
+            lf_ratio > 0.35 or  # High LF content (wind-like)
+            s_flat > 0.6 or     # Very flat spectrum (surf/river-like)
+            env_kurt > 4.0      # High kurtosis (rain-like)
+        )
+        
         auto_log_line = (f"AUTO-PREPROC={apply_preproc} "
-                        f"(LF_ratio={auto_metrics['LF_ratio']:.2f}, "
-                        f"S_flat={auto_metrics['S_flat']:.2f}, kurt={auto_metrics['kurt']:.2f})")
+                        f"(LF_ratio={lf_ratio:.2f}, "
+                        f"S_flat={s_flat:.2f}, kurt={env_kurt:.2f})")
         report_lines.append(auto_log_line)
         print(f"Auto-detection: {auto_log_line}")
     else:
@@ -371,14 +406,50 @@ if __name__ == "__main__":
         help="Preprocess mode: off (never), force (always if params exist), auto (detect). Default: profile-driven."
     )
     parser.add_argument(
+        "--suggest-profile",
+        choices=["off", "always", "if_none"],
+        default="off",
+        help="Profile suggestion mode: off (never suggest), always (suggest and use if no profile set), if_none (suggest only)"
+    )
+
+    parser.add_argument(
         "--export_preprocessed",
         action="store_true",
         help="Export preprocessed beam WAVs instead of originals."
+    )
+    parser.add_argument(
+        "--suggest-profile-only",
+        action="store_true",
+        help="Only run profile suggestion for the input file and exit. No analysis performed."
     )
     # Optional explicit overrides (useful when --profile none)
     parser.add_argument("--hpf_hz", type=float, default=None, help="High-pass filter frequency in Hz")
     parser.add_argument("--envelope_median_ms", type=float, default=None, help="Envelope median filter duration in ms")
     args = parser.parse_args()
+    # SUGGEST PROFILE ONLY MODE
+    if getattr(args, "suggest_profile_only", False):
+        if not args.input_file:
+            print("--suggest-profile-only requires --input_file")
+            exit(1)
+        import soundfile as sf
+        from ambisonic_beamforming import AmbisonicBeamformer
+        from beamforming_utils.beamforming_analysis import suggest_profile
+        audio, sample_rate = sf.read(args.input_file)
+        if audio.ndim != 2 or audio.shape[1] != 9:
+            print(f"Error: Expected 9 channels for 2nd-order ambisonics, got {audio.shape[1] if audio.ndim > 1 else 1}")
+            exit(1)
+        beamformer = AmbisonicBeamformer(sample_rate)
+        forward_beam = beamformer.beamform(audio, [(0, 0)])
+        forward_beam = forward_beam.squeeze()
+        suggested_profile, confidence, features = suggest_profile(forward_beam, sample_rate)
+        print("\nPROFILE SUGGESTION ONLY MODE")
+        print("---------------------------")
+        print(f"Suggested profile: {suggested_profile}")
+        print(f"Confidence: {confidence:.2f}")
+        print("Features:")
+        for k, v in features.items():
+            print(f"  {k}: {v:.3f}")
+        exit(0)
 
     # Handle geophony profiles and CLI overrides
     profile_name = args.profile or "none"
@@ -432,6 +503,7 @@ if __name__ == "__main__":
                 export_all_directions=args.export_all,
                 profile_name=profile_name,
                 preproc_mode=args.preproc,
+                suggest_profile_mode=args.suggest_profile,
                 profile_params=params,
             )
 

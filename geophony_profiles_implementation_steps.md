@@ -569,6 +569,8 @@ if preproc and preproc.get("hpf_hz"):
 **Acceptance Criteria**
 - README updated with a concise, clear section.
 
+-- DONE --
+
 ---
 
 ## 13) Optional: Auto-Suggest Profile

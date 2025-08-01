@@ -14,6 +14,62 @@ from beamforming_utils.config import (
     ADI_AEI_DB_THRESHOLD, NDSI_BIO, NDSI_ANTH,
 )
 
+def suggest_profile(x, sr):
+    """
+    Analyze audio features to suggest an appropriate geophony profile.
+    Returns (suggested_profile, confidence_score, feature_dict).
+    """
+    # Analyze at most 10s for speed
+    x = x[:min(len(x), sr*10)]
+    
+    # Feature extraction
+    # 1. LF ratio (<120 Hz) - wind, surf indicator
+    freqs = np.fft.rfftfreq(len(x), 1/sr)
+    X = np.abs(np.fft.rfft(x)) + 1e-12
+    lf_ratio = X[freqs < 120].sum() / X.sum()
+    
+    # 2. Crest factor - thunder indicator
+    crest = np.max(np.abs(x)) / np.sqrt(np.mean(x**2))
+    
+    # 3. Spectral flatness - surf/river indicator
+    s_flat = np.exp(np.mean(np.log(X))) / (np.mean(X) + 1e-12)
+    
+    # 4. Envelope modulation - rain indicator
+    env = np.abs(sps.hilbert(x))
+    env_kurt = stats.kurtosis(env)
+    env_var = np.var(env) / (np.mean(env)**2 + 1e-12)
+    
+    # Feature dictionary for logging
+    features = {
+        "lf_ratio": float(lf_ratio),
+        "crest_factor": float(crest),
+        "spectral_flatness": float(s_flat),
+        "envelope_kurtosis": float(env_kurt),
+        "envelope_var": float(env_var)
+    }
+    
+    # Simple rule-based suggestion
+    confidence = 0.0
+    profile = "none"
+    
+    if lf_ratio > 0.35 and s_flat < 0.5:
+        profile = "wind"
+        confidence = min(1.0, lf_ratio * 2)
+    elif env_kurt > 4.0 and env_var > 0.5:
+        profile = "rain"
+        confidence = min(1.0, env_kurt / 8.0)
+    elif s_flat > 0.6 and lf_ratio > 0.2:
+        profile = "surf_river"
+        confidence = min(1.0, s_flat * 1.2)
+    elif crest > 5.0 and lf_ratio > 0.15:
+        profile = "thunder"
+        confidence = min(1.0, crest / 10.0)
+    elif lf_ratio > 0.25 or s_flat > 0.45:
+        profile = "geophony_general"
+        confidence = 0.6  # Less confident generic suggestion
+        
+    return profile, confidence, features
+
 # =========================
 # Analysis helpers
 # =========================
