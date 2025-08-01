@@ -554,6 +554,8 @@ if preproc and preproc.get("hpf_hz"):
 **Acceptance Criteria**
 - Evidence of all three checks in logs/report snippets.
 
+-- DONE --
+
 ---
 
 ## 12) Document the Feature (README)

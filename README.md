@@ -1,10 +1,143 @@
+
 # README — Creative Ecoacoustic Beamforming (Option 2, single‑pass indices)
 
 ## Purpose
 
-This repository provides a **pragmatic, artist‑oriented pipeline** that steers a 2nd‑order ambisonic recording into many directions (“beams”), computes **ecoacoustic indices** once for each beam, ranks beams by a **composite uniqueness score**, and exports a **diverse, non‑redundant subset** for creative soundscape composition and further analysis.
+This repository provides a **pragmatic, artist‑oriented pipeline** for steering a 2nd‑order ambisonic recording into many directions (“beams”), computing ecoacoustic indices, ranking beams by a composite uniqueness score, and exporting a diverse, non‑redundant subset for creative soundscape composition and analysis.
 
-It is not a biodiversity survey tool. Instead, it uses ecological signal descriptors (e.g., ACI, ADI, spectral/temporal entropy) to **guide creative beam selection**—helping you find **meaningful spatial perspectives** in a complex soundfield for composition and installation work.
+It is not a biodiversity survey tool. Instead, it uses ecological signal descriptors (e.g., ACI, ADI, spectral/temporal entropy) to guide creative beam selection—helping you find meaningful spatial perspectives in a complex soundfield for composition and installation work.
+
+---
+
+## Quick Start
+
+1. Place your 9‑channel 2nd‑order ambisonic WAV in the project folder.
+2. Ensure `ambisonic_beamforming.py` is present and importable.
+3. In the main script, set:
+   ```python
+   input_file = "your_ambi_2nd_order.wav"
+   GRID_MODE = "latlong"  # or "fibonacci"
+   ```
+4. Run:
+   ```bash
+   python main.py
+   ```
+5. Inspect outputs in:
+   ```
+   ecoacoustic_analysis/<input_stem>/
+     correlation_matrix.csv
+     maad_indices_all_directions.csv
+     maad_indices.csv
+     selection_report.txt
+     selection_analysis.png
+     exported_spectrograms.png
+     ecoacoustic_<direction>_<dur>s.wav
+   ```
+
+---
+
+## Geophony Profiles
+
+The pipeline includes **geophony profiles** that optimize ecoacoustic analysis for different natural soundscape contexts. These profiles adjust index weights, thresholds, and preprocessing to better handle environmental sounds like wind, rain, rivers, and thunder.
+
+### Available Profiles
+
+| Profile | Best For | Key Features |
+|---------|----------|--------------|
+| `wind` | Windy environments, rustling vegetation | HPF@120Hz, emphasizes temporal complexity |
+| `rain` | Rainfall, light precipitation | Envelope smoothing, balances ADI/spatial |
+| `surf_river` | Water sounds, rivers, ocean surf | HPF@60Hz, high ADI weight (0.3) |
+| `thunder` | Storms, low-frequency events | No HPF, high temporal weight (0.4) |
+| `geophony_general` | Mixed natural environments | Moderate HPF@90Hz, balanced weights |
+| `none` | Default behavior | Uses original project weights/thresholds |
+
+### Profile Weights Comparison
+
+Profiles reweight the uniqueness score components to emphasize different acoustic characteristics:
+
+| Profile | Spectral Activity (Hf) | Frequency Diversity (ADI) | Temporal Complexity (1-Ht) | Acoustic Complexity (ACI) | Spatial Uniqueness |
+|---------|------------------------|---------------------------|----------------------------|---------------------------|-------------------|
+| `wind` | 0.15 | 0.10 | **0.30** | 0.15 | **0.30** |
+| `rain` | 0.10 | 0.15 | **0.30** | 0.10 | **0.35** |
+| `surf_river` | 0.10 | **0.30** | 0.10 | 0.20 | **0.30** |
+| `thunder` | 0.05 | 0.05 | **0.40** | 0.15 | **0.35** |
+| `geophony_general` | 0.10 | 0.20 | **0.30** | 0.10 | **0.30** |
+
+### CLI Usage
+
+```bash
+# Use wind profile for windy recordings
+python beamforming-export-scikit-maad.py --input_file windy_forest.wav --profile wind
+
+# Compare profiles on the same recording
+python beamforming-export-scikit-maad.py --input_file stream.wav --profile surf_river --output_dir out_river
+python beamforming-export-scikit-maad.py --input_file stream.wav --profile none --output_dir out_baseline
+
+# Override profile parameters
+python beamforming-export-scikit-maad.py --input_file test.wav --profile wind --hpf_hz 150
+
+# Control preprocessing explicitly
+python beamforming-export-scikit-maad.py --input_file test.wav --profile wind --preproc off    # disable
+python beamforming-export-scikit-maad.py --input_file test.wav --profile none --preproc force --hpf_hz 100  # force
+```
+
+### Preprocessing Features
+
+Profiles can apply light preprocessing **for index calculation only** (exported WAVs remain unprocessed by default):
+
+- **High-pass filtering:** Reduces low-frequency rumble from wind/handling (wind: 120Hz, surf_river: 60Hz, geophony_general: 90Hz)
+- **Envelope smoothing:** Reduces rain tick artifacts (rain: 15ms median filter)
+- **Auto-detection:** `--preproc auto` can detect when preprocessing is beneficial based on spectral characteristics
+
+### Report Provenance
+
+All profile settings and preprocessing decisions are logged in `selection_report.txt`:
+
+```plaintext
+PROFILE METADATA
+--------------------------------------------------
+PROFILE: wind
+Weights: {'Hf': 0.15, 'ADI': 0.1, 'TEMP': 0.3, 'ACI': 0.15, 'SPATIAL': 0.3}
+Params: ADI_dB=-30, corr=0.6, min_angle=45.0, hpf=120, envelope_median_ms=None
+
+PREPROCESSING PROVENANCE
+--------------------------------------------------
+PREPROC_MODE: None
+PREPROC_PARAMS: hpf_hz=120, envelope_median_ms=None
+DEBUG: LF_energy<120Hz pre=0.6854 post=0.2093 (profile=wind, preproc=applied)
+DEBUG: total_score(direction_0)=0.2953 (profile=wind)
+DEBUG: ADI_dB threshold used: -30
+```
+
+This ensures **full reproducibility** and helps verify that profiles are working as expected.
+
+### When to Use Each Profile
+
+- **`wind`**: Outdoor recordings with significant low-frequency wind noise, rustling leaves, or handling artifacts
+- **`rain`**: Light to moderate rainfall, drizzle, or recordings with repetitive water droplet sounds
+- **`surf_river`**: Flowing water, ocean waves, streams, or waterfalls where frequency diversity is key
+- **`thunder`**: Storm recordings, distant thunder, or any environment with important low-frequency events
+- **`geophony_general`**: Mixed natural environments or when unsure which specific profile to use
+- **`none`**: Controlled environments, indoor recordings, or when you prefer the original algorithm
+
+### Profile Validation
+
+You can test profile integrity with:
+
+```bash
+pytest tests/test_profiles.py -v
+```
+
+This validates that all profiles exist, weights sum to 1.0, and required parameters are present.
+
+---
+
+## Requirements
+
+* Python 3.9+ (recommended)
+* Install:
+  `pip install scikit-maad pandas soundfile matplotlib scipy`
+* `ambisonic_beamforming.py` must define `AmbisonicBeamformer` compatible with **2nd‑order (9‑channel)** ambisonic input.
 
 ---
 
@@ -33,42 +166,97 @@ It is not a biodiversity survey tool. Instead, it uses ecological signal descrip
 
 ---
 
-## Requirements
+The pipeline includes **geophony profiles** that optimize ecoacoustic analysis for different natural soundscape contexts. These profiles adjust index weights, thresholds, and preprocessing to better handle environmental sounds like wind, rain, rivers, and thunder.
 
-* Python 3.9+ (recommended)
-* Install:
-  `pip install scikit-maad pandas soundfile matplotlib scipy`
-* `ambisonic_beamforming.py` must define `AmbisonicBeamformer` compatible with **2nd‑order (9‑channel)** ambisonic input.
+### Available Profiles
 
----
+| Profile | Best For | Key Features |
+|---------|----------|--------------|
+| `wind` | Windy environments, rustling vegetation | HPF@120Hz, emphasizes temporal complexity |
+| `rain` | Rainfall, light precipitation | Envelope smoothing, balances ADI/spatial |
+| `surf_river` | Water sounds, rivers, ocean surf | HPF@60Hz, high ADI weight (0.3) |
+| `thunder` | Storms, low-frequency events | No HPF, high temporal weight (0.4) |
+| `geophony_general` | Mixed natural environments | Moderate HPF@90Hz, balanced weights |
+| `none` | Default behavior | Uses original project weights/thresholds |
 
-## Quick Start
+### Profile Weights Comparison
 
-1. Place your 9‑channel 2nd‑order ambisonic WAV in the project folder.
-2. Ensure `ambisonic_beamforming.py` is present and importable.
-3. In the main script, set:
+Profiles reweight the uniqueness score components to emphasize different acoustic characteristics:
 
-   ```python
-   input_file = "your_ambi_2nd_order.wav"
-   GRID_MODE = "latlong"  # or "fibonacci"
-   ```
-4. Run:
+| Profile | Spectral Activity (Hf) | Frequency Diversity (ADI) | Temporal Complexity (1-Ht) | Acoustic Complexity (ACI) | Spatial Uniqueness |
+|---------|------------------------|---------------------------|----------------------------|---------------------------|-------------------|
+| `wind` | 0.15 | 0.10 | **0.30** | 0.15 | **0.30** |
+| `rain` | 0.10 | 0.15 | **0.30** | 0.10 | **0.35** |
+| `surf_river` | 0.10 | **0.30** | 0.10 | 0.20 | **0.30** |
+| `thunder` | 0.05 | 0.05 | **0.40** | 0.15 | **0.35** |
+| `geophony_general` | 0.10 | 0.20 | **0.30** | 0.10 | **0.30** |
 
-   ```bash
-   python main.py
-   ```
-5. Inspect outputs in:
+### CLI Usage
 
-   ```
-   ecoacoustic_analysis/<input_stem>/
-     correlation_matrix.csv
-     maad_indices_all_directions.csv
-     maad_indices.csv
-     selection_report.txt
-     selection_analysis.png
-     exported_spectrograms.png
-     ecoacoustic_<direction>_<dur>s.wav
-   ```
+```bash
+# Use wind profile for windy recordings
+python beamforming-export-scikit-maad.py --input_file windy_forest.wav --profile wind
+
+# Compare profiles on the same recording
+python beamforming-export-scikit-maad.py --input_file stream.wav --profile surf_river --output_dir out_river
+python beamforming-export-scikit-maad.py --input_file stream.wav --profile none --output_dir out_baseline
+
+# Override profile parameters
+python beamforming-export-scikit-maad.py --input_file test.wav --profile wind --hpf_hz 150
+
+# Control preprocessing explicitly
+python beamforming-export-scikit-maad.py --input_file test.wav --profile wind --preproc off    # disable
+python beamforming-export-scikit-maad.py --input_file test.wav --profile none --preproc force --hpf_hz 100  # force
+```
+
+### Preprocessing Features
+
+Profiles can apply light preprocessing **for index calculation only** (exported WAVs remain unprocessed by default):
+
+- **High-pass filtering:** Reduces low-frequency rumble from wind/handling (wind: 120Hz, surf_river: 60Hz, geophony_general: 90Hz)
+- **Envelope smoothing:** Reduces rain tick artifacts (rain: 15ms median filter)
+- **Auto-detection:** `--preproc auto` can detect when preprocessing is beneficial based on spectral characteristics
+
+### Report Provenance
+
+All profile settings and preprocessing decisions are logged in `selection_report.txt`:
+
+```plaintext
+PROFILE METADATA
+--------------------------------------------------
+PROFILE: wind
+Weights: {'Hf': 0.15, 'ADI': 0.1, 'TEMP': 0.3, 'ACI': 0.15, 'SPATIAL': 0.3}
+Params: ADI_dB=-30, corr=0.6, min_angle=45.0, hpf=120, envelope_median_ms=None
+
+PREPROCESSING PROVENANCE
+--------------------------------------------------
+PREPROC_MODE: None
+PREPROC_PARAMS: hpf_hz=120, envelope_median_ms=None
+DEBUG: LF_energy<120Hz pre=0.6854 post=0.2093 (profile=wind, preproc=applied)
+DEBUG: total_score(direction_0)=0.2953 (profile=wind)
+DEBUG: ADI_dB threshold used: -30
+```
+
+This ensures **full reproducibility** and helps verify that profiles are working as expected.
+
+### When to Use Each Profile
+
+- **`wind`**: Outdoor recordings with significant low-frequency wind noise, rustling leaves, or handling artifacts
+- **`rain`**: Light to moderate rainfall, drizzle, or recordings with repetitive water droplet sounds
+- **`surf_river`**: Flowing water, ocean waves, streams, or waterfalls where frequency diversity is key
+- **`thunder`**: Storm recordings, distant thunder, or any environment with important low-frequency events
+- **`geophony_general`**: Mixed natural environments or when unsure which specific profile to use
+- **`none`**: Controlled environments, indoor recordings, or when you prefer the original algorithm
+
+### Profile Validation
+
+You can test profile integrity with:
+
+```bash
+pytest tests/test_profiles.py -v
+```
+
+This validates that all profiles exist, weights sum to 1.0, and required parameters are present.
 
 ---
 
