@@ -510,6 +510,8 @@ pytest -k test_profiles -q
 **Acceptance Criteria**
 - Tests pass and weights sum correctly.
 
+-- DONE --
+
 ---
 
 ## 10) Smoke Test With Real Audio (Per Profile)
