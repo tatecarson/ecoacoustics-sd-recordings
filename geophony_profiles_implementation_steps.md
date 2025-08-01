@@ -480,6 +480,8 @@ f.write(f"Params: ADI_dB={params['ADI_dB']}, corr={params['corr']}, min_angle={p
 **Acceptance Criteria**
 - Report includes profile metadata for reproducibility.
 
+-- DONE -- 
+
 ---
 
 ## 9) Quick Sanity Tests Without Audio
