@@ -329,8 +329,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--profile",
         type=str,
-        default=None,
-        help="Optional profile name (e.g., 'water') to adjust defaults."
+        default="none",
+        choices=["wind","rain","surf_river","thunder","geophony_general","none"],
+        help="Geophony profile to tune indices/selection."
     )
     parser.add_argument(
         "--preproc",
