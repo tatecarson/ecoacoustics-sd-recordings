@@ -349,7 +349,7 @@ if apply_preproc:
 * Decisions match the mode selected (off/force/auto/profile).
 * No changes to default export unless an explicit “export preprocessed” flag is added.
 
--- MAYBE DONE, add tests for those specific checkpoints -- 
+-- DONE -- 
 
 ---
 

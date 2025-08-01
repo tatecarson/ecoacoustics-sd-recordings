@@ -11,14 +11,26 @@ from beamforming_utils.config import (
 )
 
 def create_selection_report(
-    selected_directions, uniqueness_scores, correlation_matrix, all_directions, output_path, exported_files
+    selected_directions, uniqueness_scores, correlation_matrix, all_directions, output_path, exported_files,
+    preproc_mode=None, profile_params=None, report_lines=None
 ):
-    """Create a detailed report explaining the selection decisions."""
+    """Create a detailed report explaining the selection decisions, including preprocessing provenance."""
     report_file = output_path / "selection_report.txt"
     dir_to_idx = {direction: i for i, direction in enumerate(all_directions)}
     score_lookup = {s["direction"]: s for s in uniqueness_scores}
 
     with open(report_file, "w") as f:
+        # --- Provenance block ---
+        f.write("PREPROCESSING PROVENANCE\n")
+        f.write("-" * 50 + "\n")
+        f.write(f"PREPROC_MODE: {preproc_mode}\n")
+        if profile_params is not None:
+            f.write(f"PREPROC_PARAMS: hpf_hz={profile_params.get('hpf_hz')}, envelope_median_ms={profile_params.get('envelope_median_ms')}\n")
+        if report_lines:
+            for line in report_lines:
+                if 'AUTO-PREPROC' in line:
+                    f.write(line + "\n")
+        f.write("\n")
         f.write("ECOACOUSTIC BEAMFORMING SELECTION REPORT\n")
         f.write("=" * 50 + "\n\n")
 

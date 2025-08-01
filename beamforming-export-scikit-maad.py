@@ -224,7 +224,8 @@ def analyze_and_export_best_directions(
 
     # Step 6: Selection report
     create_selection_report(
-        selected_directions, uniqueness_scores, correlation_matrix, directions, nested_output_path, exported_files
+        selected_directions, uniqueness_scores, correlation_matrix, directions, nested_output_path, exported_files,
+        preproc_mode=preproc_mode, profile_params=profile_params, report_lines=report_lines
     )
 
     # Append compact indices summary to report
@@ -309,43 +310,6 @@ if __name__ == "__main__":
         help="Export both selected and rejected directions. Rejected files are prefixed with 'rejected_'."
     )
     parser.add_argument(
-        "--window",
-        type=float,
-        default=30.0,
-        help="Window size in seconds for analysis (default: 30.0)."
-    )
-    parser.add_argument(
-        "--hop",
-        type=float,
-        default=15.0,
-        help="Hop size in seconds for windowed analysis (default: 15.0)."
-    )
-    parser.add_argument(
-        "--pool",
-        type=str,
-        choices=["mean", "p80", "meanp80"],
-        default="meanp80",
-        help="Pooling method for windowed indices: mean, p80, or meanp80 (default: meanp80)."
-    )
-    parser.add_argument(
-        "--pool_alpha",
-        type=float,
-        default=None,
-        help="Alpha parameter for meanp80 pooling (0..1, default: 0.5, or 0.3 for 'water' profile)."
-    )
-    parser.add_argument(
-        "--highlights",
-        type=int,
-        default=0,
-        help="Number of highlight windows to export (default: 0, disables highlights)."
-    )
-    parser.add_argument(
-        "--min_rms_db",
-        type=float,
-        default=-60.0,
-        help="Minimum RMS (dB) threshold for window inclusion (default: -60.0)."
-    )
-    parser.add_argument(
         "--profile",
         type=str,
         default=None,
@@ -361,12 +325,6 @@ if __name__ == "__main__":
     parser.add_argument("--hpf_hz", type=float, default=None, help="High-pass filter frequency in Hz")
     parser.add_argument("--envelope_median_ms", type=float, default=None, help="Envelope median filter duration in ms")
     args = parser.parse_args()
-
-    # Set pool_alpha default for 'water' profile if not explicitly provided
-    if args.profile == "water" and args.pool_alpha is None:
-        args.pool_alpha = 0.3
-    elif args.pool_alpha is None:
-        args.pool_alpha = 0.5
 
     # Handle geophony profiles and CLI overrides
     profile_name = args.profile or "none"
