@@ -310,6 +310,12 @@ if __name__ == "__main__":
         help="Output directory for analysis results."
     )
     parser.add_argument(
+        "--duration_seconds",
+        type=float,
+        default=DEFAULT_DURATION_SECONDS,
+        help="Duration (in seconds) of the segment to analyze from each file."
+    )
+    parser.add_argument(
         "--grid_mode",
         type=str,
         default="beamformer_default",
@@ -388,7 +394,7 @@ if __name__ == "__main__":
             exported_files = analyze_and_export_best_directions(
                 input_file=input_file,
                 output_dir=args.output_dir,
-                duration_seconds=DEFAULT_DURATION_SECONDS,
+                duration_seconds=args.duration_seconds,
                 start_time=DEFAULT_START_TIME,
                 max_exports=MAX_EXPORTS,
                 min_uniqueness_threshold=MIN_UNIQUENESS_THRESHOLD,
