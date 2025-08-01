@@ -102,3 +102,17 @@ class AmbisonicBeamformer:
         """
         names, angles = self.directions_3d()
         return self.beamform(audio, angles), names
+    
+    def beamform_to_directions(self, audio: np.ndarray, angles: list) -> Tuple[np.ndarray, list]:
+        """
+        Beamform to arbitrary directions.
+        Args:
+            audio: (samples, 9)
+            angles: list of (azimuth, elevation) in degrees
+        Returns:
+            (samples, num_directions), direction_names
+        """
+        out = self.beamform(audio, angles)
+        # Generate direction names as "az<az>_el<el>"
+        names = [f"az{int(az)}_el{int(el)}" for az, el in angles]
+        return out, names

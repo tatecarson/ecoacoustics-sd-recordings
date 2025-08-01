@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Test export_preprocessed flag",
+			"command": "python beamforming-export-scikit-maad.py --input_file test-30s.wav --duration 5 --profile wind --export_preprocessed --output_dir out_wind_test",
+			"group": "test"
+		}
+	]
+}

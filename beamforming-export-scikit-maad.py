@@ -156,11 +156,19 @@ def analyze_and_export_best_directions(
 
     # Step 2: Uniqueness metrics (single pass) -> reuse everywhere
     print("Step 2: Analyzing uniqueness metrics...")
+    # Compute preprocessed audio for indices if needed
+    if apply_preproc:
+        beam_for_indices = np.copy(beamformed_audio)
+        for i in range(beamformed_audio.shape[1]):
+            beam_for_indices[:, i] = maybe_preprocess(beamformed_audio[:, i], sample_rate, profile_params)
+    else:
+        beam_for_indices = beamformed_audio
+
     uniqueness_scores, indices_df_all = calculate_uniqueness_metrics(
-        beamformed_audio, directions, sample_rate,
+        beam_for_indices, directions, sample_rate,
         profile_weights=profile_params.get('weights'),
         ADI_dB_threshold=profile_params.get("ADI_dB"),
-        preproc=profile_params if apply_preproc else None
+        preproc=None  # already applied if needed
     )
 
     # Save ALL-directions CSV directly (no recomputation)
@@ -186,8 +194,10 @@ def analyze_and_export_best_directions(
 
     # Step 4: Export selected directions
     print(f"Step 4: Exporting {len(selected_directions)} selected directions...")
+    # Choose which audio to export
+    export_audio = beam_for_indices if getattr(args, "export_preprocessed", False) else beamformed_audio
     exported_files = export_selected_directions(
-        beamformed_audio, directions, selected_directions, nested_output_path, duration_seconds, sample_rate
+        export_audio, directions, selected_directions, nested_output_path, duration_seconds, sample_rate
     )
 
     # Step 4b: Export non-selected directions if requested
@@ -198,7 +208,7 @@ def analyze_and_export_best_directions(
         if non_selected_directions:
             print(f"Step 4b: Exporting {len(non_selected_directions)} non-selected directions...")
             non_selected_files = export_non_selected_directions(
-                beamformed_audio, directions, non_selected_directions, nested_output_path, duration_seconds, sample_rate
+                export_audio, directions, non_selected_directions, nested_output_path, duration_seconds, sample_rate
             )
             all_exported_files.extend(non_selected_files)
 
@@ -300,6 +310,13 @@ if __name__ == "__main__":
         help="Output directory for analysis results."
     )
     parser.add_argument(
+        "--grid_mode",
+        type=str,
+        default="beamformer_default",
+        choices=["latlong", "fibonacci", "beamformer_default"],
+        help="Direction grid for beamforming."
+    )
+    parser.add_argument(
         "--html_report",
         action="store_true",
         help="Generate interactive HTML report for each processed file."
@@ -320,6 +337,11 @@ if __name__ == "__main__":
         choices=["off", "force", "auto"],
         default=None,  # None => profile-driven default
         help="Preprocess mode: off (never), force (always if params exist), auto (detect). Default: profile-driven."
+    )
+    parser.add_argument(
+        "--export_preprocessed",
+        action="store_true",
+        help="Export preprocessed beam WAVs instead of originals."
     )
     # Optional explicit overrides (useful when --profile none)
     parser.add_argument("--hpf_hz", type=float, default=None, help="High-pass filter frequency in Hz")
@@ -372,7 +394,7 @@ if __name__ == "__main__":
                 use_correlation_filter=USE_CORRELATION_FILTER,
                 use_min_angle_filter=USE_MIN_ANGLE_FILTER,
                 min_angular_separation_deg=params.get("min_angle", MIN_ANGULAR_SEPARATION_DEG),
-                grid_mode=GRID_MODE,
+                grid_mode=args.grid_mode,
                 generate_html_report=args.html_report,
                 export_all_directions=args.export_all,
                 profile_name=profile_name,

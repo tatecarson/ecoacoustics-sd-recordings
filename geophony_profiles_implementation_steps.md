@@ -379,6 +379,8 @@ if 'AUTO-PREPROC' in ''.join(report_lines):
 
 * Reproducible runs: the report clearly states whether and how preprocessing was applied.
 
+-- DONE -- 
+
 ---
 
 ### 6.4 (Optional) Exporting Preprocessed Audio
@@ -405,6 +407,7 @@ out_audio = beam_for_indices if args.export_preprocessed else beam
 
 * Default export remains unchanged; opting in works as intended.
 
+-- DONE -- 
 
 ---
 
