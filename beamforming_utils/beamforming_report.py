@@ -53,7 +53,7 @@ def create_selection_report(
             f.write(f"PREPROC_PARAMS: hpf_hz={profile_params.get('hpf_hz')}, envelope_median_ms={profile_params.get('envelope_median_ms')}\n")
         if report_lines:
             for line in report_lines:
-                if 'AUTO-PREPROC' in line:
+                if 'AUTO-PREPROC' in line or 'DEBUG:' in line:
                     f.write(line + "\n")
         f.write("\n")
         f.write("ECOACOUSTIC BEAMFORMING SELECTION REPORT\n")

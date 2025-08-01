@@ -159,10 +159,25 @@ def analyze_and_export_best_directions(
     # Compute preprocessed audio for indices if needed
     if apply_preproc:
         beam_for_indices = np.copy(beamformed_audio)
+        # --- Targeted Functional Check 3: Log LF energy <120 Hz pre/post HPF when preprocessing is actually applied ---
+        if profile_params.get("hpf_hz"):
+            # Only log for the first beam
+            orig = beamformed_audio[:, 0]
+            proc = maybe_preprocess(orig, sample_rate, profile_params)
+            freqs = np.fft.rfftfreq(len(orig), 1/sample_rate)
+            X_orig = np.abs(np.fft.rfft(orig))
+            X_proc = np.abs(np.fft.rfft(proc))
+            lf_mask = freqs < 120
+            lf_energy_orig = X_orig[lf_mask].sum() / X_orig.sum()
+            lf_energy_proc = X_proc[lf_mask].sum() / X_proc.sum()
+            report_lines.append(f"DEBUG: LF_energy<120Hz pre={lf_energy_orig:.4f} post={lf_energy_proc:.4f} (profile={profile_params.get('profile_name','none')}, preproc=applied)")
         for i in range(beamformed_audio.shape[1]):
             beam_for_indices[:, i] = maybe_preprocess(beamformed_audio[:, i], sample_rate, profile_params)
     else:
         beam_for_indices = beamformed_audio
+        # --- Debug note when preprocessing is skipped despite profile having HPF params ---
+        if profile_params.get("hpf_hz"):
+            report_lines.append(f"DEBUG: LF_energy<120Hz preprocessing skipped (profile={profile_params.get('profile_name','none')}, preproc=disabled)")
 
     uniqueness_scores, indices_df_all = calculate_uniqueness_metrics(
         beam_for_indices, directions, sample_rate,
@@ -170,6 +185,14 @@ def analyze_and_export_best_directions(
         ADI_dB_threshold=profile_params.get("ADI_dB"),
         preproc=None  # already applied if needed
     )
+
+    # --- Targeted Functional Check 1: Log total_score for a fixed direction under current profile ---
+    if len(directions) > 0 and "total_score" in indices_df_all.columns:
+        fixed_dir = directions[0]
+        row = indices_df_all[indices_df_all["direction"] == fixed_dir]
+        if not row.empty:
+            total_score = row.iloc[0]["total_score"]
+            report_lines.append(f"DEBUG: total_score(direction_0)={total_score:.4f} (profile={profile_params.get('profile_name','none')})")
 
     # Save ALL-directions CSV directly (no recomputation)
     all_csv = nested_output_path / "maad_indices_all_directions.csv"
@@ -233,6 +256,8 @@ def analyze_and_export_best_directions(
         )
 
     # Step 6: Selection report
+    # --- Targeted Functional Check 2: Log ADI threshold in report ---
+    report_lines.append(f"DEBUG: ADI_dB threshold used: {profile_params.get('ADI_dB')}")
     create_selection_report(
         selected_directions, uniqueness_scores, correlation_matrix, directions, nested_output_path, exported_files,
         preproc_mode=preproc_mode, profile_params=profile_params, report_lines=report_lines
@@ -425,3 +450,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error: {e}")
             print("Ensure you have a 9-channel 2nd-order ambisonic WAV and ambisonic_beamforming.py present.")
+
+

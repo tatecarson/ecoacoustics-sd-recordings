@@ -533,6 +533,8 @@ done
 **Acceptance Criteria**
 - Per-profile runs succeed; `maad_indices.csv` reflects expected shifts (e.g., higher ADI contribution under `surf_river`).
 
+-- DONE --
+
 ---
 
 ## 11) Targeted Functional Checks
