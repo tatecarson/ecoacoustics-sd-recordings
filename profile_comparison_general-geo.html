@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Geophony Profile Comparison</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: right; }
+        th { background: #f0f0f0; }
+        caption { font-weight: bold; font-size: 1.2em; margin-bottom: 0.5em; }
+        .profile-section { margin-bottom: 3em; }
+    </style>
+</head>
+<body>
+
+
+<script>
+const soundfileMap = {
+    'general-geo': {
+        wind: [
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'east', file: 'ecoacoustic_east_30s.wav'},
+            {dir: 'south', file: 'ecoacoustic_south_30s.wav'},
+            {dir: 'west', file: 'ecoacoustic_west_30s.wav'}
+        ],
+        rain: [
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'up-west', file: 'ecoacoustic_up-west_30s.wav'},
+            {dir: 'down-south', file: 'ecoacoustic_down-south_30s.wav'}
+        ],
+        surf_river: [
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'},
+            {dir: 'west', file: 'ecoacoustic_west_30s.wav'},
+            {dir: 'up-south', file: 'ecoacoustic_up-south_30s.wav'}
+        ],
+        thunder: [
+            {dir: 'northeast', file: 'ecoacoustic_northeast_30s.wav'},
+            {dir: 'up-west', file: 'ecoacoustic_up-west_30s.wav'},
+            {dir: 'down-south', file: 'ecoacoustic_down-south_30s.wav'}
+        ],
+        geophony_general: [
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'},
+            {dir: 'southwest', file: 'ecoacoustic_southwest_30s.wav'}
+        ],
+        none: [
+            {dir: 'northeast', file: 'ecoacoustic_northeast_30s.wav'},
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'},
+            {dir: 'northwest', file: 'ecoacoustic_northwest_30s.wav'},
+            {dir: 'up-south', file: 'ecoacoustic_up-south_30s.wav'},
+            {dir: 'down-west', file: 'ecoacoustic_down-west_30s.wav'}
+        ]
+    },
+    'none': {
+        wind: [
+            {dir: 'down-north', file: 'ecoacoustic_down-north_30s.wav'},
+            {dir: 'down', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'west', file: 'ecoacoustic_west_30s.wav'}
+        ],
+        rain: [
+            {dir: 'down-west', file: 'ecoacoustic_down-west_30s.wav'},
+            {dir: 'up-south', file: 'ecoacoustic_up-south_30s.wav'},
+            {dir: 'up', file: 'ecoacoustic_up_30s.wav'}
+        ],
+        surf_river: [
+            {dir: 'down', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'northwest', file: 'ecoacoustic_northwest_30s.wav'},
+            {dir: 'up-east', file: 'ecoacoustic_up-east_30s.wav'},
+            {dir: 'up-south', file: 'ecoacoustic_up-south_30s.wav'}
+        ],
+        thunder: [
+            {dir: 'down-north', file: 'ecoacoustic_down-north_30s.wav'},
+            {dir: 'down-west', file: 'ecoacoustic_down-west_30s.wav'},
+            {dir: 'down', file: 'ecoacoustic_down_30s.wav'}
+        ],
+        geophony_general: [
+            {dir: 'down_30s', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'north_30s', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'southwest_30s', file: 'ecoacoustic_southwest_30s.wav'},
+            {dir: 'up-west_30s', file: 'ecoacoustic_up-west_30s.wav'}
+        ],
+        none: [
+            {dir: 'down_30s', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'north_30s', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'northwest_30s', file: 'ecoacoustic_northwest_30s.wav'},
+            {dir: 'up-west_30s', file: 'ecoacoustic_up-west_30s.wav'}
+        ]
+    },
+    'water-flow': {
+        wind: [
+            {dir: 'down', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'northwest', file: 'ecoacoustic_northwest_30s.wav'},
+            {dir: 'up-west', file: 'ecoacoustic_up-west_30s.wav'}
+        ],
+        rain: [
+            {dir: 'down-east', file: 'ecoacoustic_down-east_30s.wav'},
+            {dir: 'down-north', file: 'ecoacoustic_down-north_30s.wav'},
+            {dir: 'down-west', file: 'ecoacoustic_down-west_30s.wav'},
+            {dir: 'south', file: 'ecoacoustic_south_30s.wav'},
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'}
+        ],
+        surf_river: [
+            {dir: 'down-east', file: 'ecoacoustic_down-east_30s.wav'},
+            {dir: 'down-north', file: 'ecoacoustic_down-north_30s.wav'},
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'northwest', file: 'ecoacoustic_northwest_30s.wav'}
+        ],
+        thunder: [
+            {dir: 'down_30s', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'north_30s', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'northwest_30s', file: 'ecoacoustic_northwest_30s.wav'}
+        ],
+        geophony_general: [
+            {dir: 'down_30s', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'north_30s', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'northwest_30s', file: 'ecoacoustic_northwest_30s.wav'},
+            {dir: 'up-west_30s', file: 'ecoacoustic_up-west_30s.wav'}
+        ],
+        none: [
+            {dir: 'down_30s', file: 'ecoacoustic_down_30s.wav'},
+            {dir: 'north_30s', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'northwest_30s', file: 'ecoacoustic_northwest_30s.wav'},
+            {dir: 'up-west_30s', file: 'ecoacoustic_up-west_30s.wav'}
+        ]
+    },
+    'wind': {
+        wind: [
+            {dir: 'down-west', file: 'ecoacoustic_down-west_30s.wav'},
+            {dir: 'east', file: 'ecoacoustic_east_30s.wav'},
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'southwest', file: 'ecoacoustic_southwest_30s.wav'},
+            {dir: 'up', file: 'ecoacoustic_up_30s.wav'}
+        ],
+        rain: [
+            {dir: 'down-south', file: 'ecoacoustic_down-south_30s.wav'},
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'},
+            {dir: 'southwest', file: 'ecoacoustic_southwest_30s.wav'},
+            {dir: 'up', file: 'ecoacoustic_up_30s.wav'}
+        ],
+        surf_river: [
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'},
+            {dir: 'southwest', file: 'ecoacoustic_southwest_30s.wav'},
+            {dir: 'up-east', file: 'ecoacoustic_up-east_30s.wav'},
+            {dir: 'up-west', file: 'ecoacoustic_up-west_30s.wav'}
+        ],
+        thunder: [
+            {dir: 'north', file: 'ecoacoustic_north_30s.wav'},
+            {dir: 'southeast', file: 'ecoacoustic_southeast_30s.wav'},
+            {dir: 'southwest', file: 'ecoacoustic_southwest_30s.wav'},
+            {dir: 'up', file: 'ecoacoustic_up_30s.wav'}
+        ],
+        geophony_general: [
+            {dir: 'down-east', file: 'ecoacoustic_down-east_30s.wav'},
+            {dir: 'up_30s', file: 'ecoacoustic_up_30s.wav'},
+            {dir: 'west', file: 'ecoacoustic_west_30s.wav'}
+        ],
+        none: [
+            {dir: 'down-east', file: 'ecoacoustic_down-east_30s.wav'},
+            {dir: 'up_30s', file: 'ecoacoustic_up_30s.wav'},
+            {dir: 'west', file: 'ecoacoustic_west_30s.wav'}
+        ]
+    }
+};
+const profiles = ['wind', 'rain', 'surf_river', 'thunder', 'geophony_general', 'none'];
+const soundTypes = ['general-geo', 'none', 'water-flow', 'wind'];
+
+function getUniqueDirections(soundType) {
+    // Collect all unique directions for this soundType across all profiles
+    const dirSet = new Set();
+    profiles.forEach(profile => {
+        (soundfileMap[soundType]?.[profile] || []).forEach(({dir}) => dirSet.add(dir));
+    });
+    return Array.from(dirSet);
+}
+
+function cellContent(profile, soundType, dir) {
+    const entry = (soundfileMap[soundType]?.[profile] || []).find(d => d.dir === dir);
+    if (!entry) return '';
+    const file = entry.file;
+    const spectrogramFile = file.replace('.wav', '_spectrogram.png');
+    return `<audio controls src="out_${profile}/${soundType}/${file}"></audio><br><img src="out_${profile}/${soundType}/spectrograms/${spectrogramFile}" alt="Spectrogram for ${dir}" style="max-width:120px;">`;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const body = document.body;
+    soundTypes.forEach(soundType => {
+        const directions = getUniqueDirections(soundType);
+        if (directions.length === 0) return;
+        // Section header
+        const h2 = document.createElement('h2');
+        h2.textContent = `Sound Type: ${soundType}`;
+        body.appendChild(h2);
+        // Table
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<th>Direction</th>` + profiles.map(p => `<th>${p}</th>`).join('');
+        thead.appendChild(tr);
+        table.appendChild(thead);
+        const tbody = document.createElement('tbody');
+        directions.forEach(dir => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${dir}</td>` + profiles.map(p => `<td>${cellContent(p, soundType, dir)}</td>`).join('');
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        body.appendChild(table);
+    });
+});
+</script>
+      
+</body>
+</html>
