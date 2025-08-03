@@ -13,6 +13,29 @@
     </style>
 </head>
 <body>
+<h1>Geophony Profiles — Weights and Audio Comparison</h1>
+
+<section id="profile-weights" class="profile-section">
+    <h2>Profile Weights</h2>
+    <p>Weights used in the composite uniqueness score (Hf + ADI + (1−Ht) + ACI + Spatial). Baseline “none” shows explicit defaults from config.</p>
+    <table>
+        <caption>Weights by Profile</caption>
+        <thead>
+            <tr>
+                <th style="text-align:left;">Profile</th>
+                <th>Hf</th>
+                <th>ADI</th>
+                <th>1−Ht</th>
+                <th>ACI</th>
+                <th>Spatial</th>
+            </tr>
+        </thead>
+        <tbody id="weights-tbody">
+            <!-- populated by JS -->
+        </tbody>
+    </table>
+    <p><strong>Legend:</strong> Hf = spectral entropy (activity), ADI = frequency diversity, 1−Ht = temporal complexity (lower Ht → higher complexity), ACI = acoustic complexity, Spatial = 1 − mean(|corr|) to other beams.</p>
+</section>
 
 
 <script>
@@ -168,6 +191,81 @@ const soundfileMap = {
 const profiles = ['wind', 'rain', 'surf_river', 'thunder', 'geophony_general', 'none'];
 const soundTypes = ['general-geo', 'none', 'water-flow', 'wind'];
 
+// Explicit profile weights (including baseline "none" from config defaults).
+// Update these constants if beamforming_utils/config.py changes.
+const weightsMap = {
+    wind:             { Hf: 0.15, ADI: 0.10, TEMP: 0.30, ACI: 0.15, SPATIAL: 0.30 },
+    rain:             { Hf: 0.10, ADI: 0.15, TEMP: 0.30, ACI: 0.10, SPATIAL: 0.35 },
+    surf_river:       { Hf: 0.10, ADI: 0.30, TEMP: 0.10, ACI: 0.20, SPATIAL: 0.30 },
+    thunder:          { Hf: 0.05, ADI: 0.05, TEMP: 0.40, ACI: 0.15, SPATIAL: 0.35 },
+    geophony_general: { Hf: 0.10, ADI: 0.20, TEMP: 0.30, ACI: 0.10, SPATIAL: 0.30 },
+    none:             { Hf: 0.10, ADI: 0.20, TEMP: 0.30, ACI: 0.10, SPATIAL: 0.30 } // baseline explicit
+};
+
+/**
+ * Auto-detect input_stem directory that contains analysis_report.html and CSVs.
+ * Tries several candidates and caches the first that exists:
+ *   1) common stems: ['general-geo','none','water-flow','wind']
+ *   2) the soundType itself
+ *   3) the profile name
+ * Path probed: out_<profile>/<soundType>/<candidate>/analysis_report.html
+ */
+const _stemCache = new Map();
+async function detectStem(profile, soundType) {
+    const key = `${profile}::${soundType}`;
+    if (_stemCache.has(key)) return _stemCache.get(key);
+
+    const candidates = ['general-geo', 'none', 'water-flow', 'wind'];
+    if (!candidates.includes(soundType)) candidates.push(soundType);
+    if (!candidates.includes(profile)) candidates.push(profile);
+
+    for (const c of candidates) {
+        const url = `out_${profile}/${soundType}/${c}/analysis_report.html`;
+        try {
+            const res = await fetch(url, { method: 'HEAD', cache: 'no-cache' });
+            if (res.ok) {
+                _stemCache.set(key, c);
+                return c;
+            }
+        } catch (_) {
+            // ignore and continue
+        }
+        // Some static hosts may block HEAD; try GET but don't download whole file unnecessarily
+        try {
+            const res = await fetch(url, { cache: 'no-cache' });
+            if (res.ok) {
+                _stemCache.set(key, c);
+                return c;
+            }
+        } catch (_) {
+            // ignore and continue
+        }
+    }
+    // As a last resort, default to soundType (may yield n/a indices if not present)
+    _stemCache.set(key, soundType);
+    return soundType;
+}
+
+// Render the weights table
+function renderWeightsTable() {
+    const tbody = document.getElementById('weights-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = profiles.map(p => {
+        const w = weightsMap[p];
+        if (!w) return '';
+        return `
+            <tr>
+                <td style="text-align:left;">${p}</td>
+                <td>${w.Hf.toFixed(2)}</td>
+                <td>${w.ADI.toFixed(2)}</td>
+                <td>${w.TEMP.toFixed(2)}</td>
+                <td>${w.ACI.toFixed(2)}</td>
+                <td>${w.SPATIAL.toFixed(2)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
 function getUniqueDirections(soundType) {
     // Collect all unique directions for this soundType across all profiles
     const dirSet = new Set();
@@ -182,10 +280,81 @@ function cellContent(profile, soundType, dir) {
     if (!entry) return '';
     const file = entry.file;
     const spectrogramFile = file.replace('.wav', '_spectrogram.png');
-    return `<audio controls src="out_${profile}/${soundType}/${file}"></audio><br><img src="out_${profile}/${soundType}/spectrograms/${spectrogramFile}" alt="Spectrogram for ${dir}" style="max-width:120px;">`;
+    const uid = `idx_${profile}_${soundType}_${dir}`.replace(/[^a-zA-Z0-9_]/g, '_');
+    return `
+        <div style="text-align:left;">
+            <audio controls src="out_${profile}/${soundType}/${file}"></audio><br>
+            <img src="out_${profile}/${soundType}/spectrograms/${spectrogramFile}" alt="Spectrogram for ${dir}" style="max-width:120px;"><br>
+            <span id="${uid}" style="font-size:0.85em; color:#444;">Indices: loading…</span>
+        </div>
+    `;
+}
+
+/**
+ * Fetch and parse a CSV file into array of objects keyed by header.
+ * Assumes simple CSV without quoted commas.
+ */
+async function fetchCsvAsObjects(url) {
+    try {
+        const res = await fetch(url, { cache: 'no-cache' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        const lines = text.trim().split(/\r?\n/);
+        if (!lines.length) return [];
+        const headers = lines[0].split(',').map(h => h.trim());
+        return lines.slice(1).map(line => {
+            const cols = line.split(',').map(c => c.trim());
+            const obj = {};
+            headers.forEach((h, i) => obj[h] = cols[i] ?? '');
+            return obj;
+        });
+    } catch (_) {
+        return [];
+    }
+}
+
+/**
+ * Load indices for a given (soundType, profile) and populate indices lines per direction.
+ * CSVs are expected in: out_<profile>/<soundType>/<input_stem>/ (same folder as analysis_report.html).
+ * Preference: maad_indices.csv (selected) then fallback to maad_indices_all_directions.csv.
+ */
+async function loadAndRenderIndicesFor(soundType, profile) {
+    const stem = await detectStem(profile, soundType);
+    const base = `out_${profile}/${soundType}/`;
+    console.log(`Loading indices for ${soundType} profile ${profile} from base: ${base}`);
+    let rows = await fetchCsvAsObjects(`${base}/maad_indices.csv`);
+    if (!rows.length) {
+        rows = await fetchCsvAsObjects(`${base}/maad_indices_all_directions.csv`);
+    }
+    const byDir = {};
+    rows.forEach(r => {
+        if (r.direction) byDir[r.direction] = r;
+    });
+    const entries = (soundfileMap[soundType]?.[profile] || []);
+    entries.forEach(({ dir }) => {
+        const uid = `idx_${profile}_${soundType}_${dir}`.replace(/[^a-zA-Z0-9_]/g, '_');
+        const node = document.getElementById(uid);
+        if (!node) return;
+        const r = byDir[dir];
+        if (!r) {
+            node.textContent = 'Indices: n/a';
+            return;
+        }
+        const num = (v) => {
+            const x = parseFloat(v);
+            return isFinite(x) ? x.toFixed(3) : 'n/a';
+        };
+        const ACI = num(r.ACI);
+        const ADI = num(r.ADI);
+        const Hf  = num(r.Hf);
+        const Ht  = num(r.Ht);
+        const total = r.total_score !== undefined ? num(r.total_score) : null;
+        node.textContent = `Indices: ACI ${ACI} | ADI ${ADI} | Hf ${Hf} | Ht ${Ht}` + (total !== null ? ` | Total ${total}` : '');
+    });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    renderWeightsTable();
     const body = document.body;
     soundTypes.forEach(soundType => {
         const directions = getUniqueDirections(soundType);
@@ -209,6 +378,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         table.appendChild(tbody);
         body.appendChild(table);
+
+        // After rendering the table rows, fetch and render indices per profile for this soundType
+        profiles.forEach(p => {
+            loadAndRenderIndicesFor(soundType, p);
+        });
     });
 });
 </script>
