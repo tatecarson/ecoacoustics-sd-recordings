@@ -582,6 +582,8 @@ if preproc and preproc.get("hpf_hz"):
 **Acceptance Criteria**
 - Suggestion appears in logs when enabled; manual override always respected.
 
+-- DONE --
+
 ---
 
 ## 14) Final Review and PR
@@ -592,6 +594,8 @@ if preproc and preproc.get("hpf_hz"):
 
 **Acceptance Criteria**
 - PR includes: code changes, test outputs, selection plots/screenshots, and report headers demonstrating profile metadata.
+
+-- I'm on this --
 
 ---
 

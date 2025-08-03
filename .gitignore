@@ -1,5 +1,6 @@
 .DS_Store
 *.reapeaks 
+*.html
 
 # Data files
 *.csv

@@ -363,6 +363,8 @@ def create_html_report(
     sample_rate,
     non_selected_files=None,
     individual_spectrograms=None,
+    profile_params=None,
+    report_lines=None,
 ):
     """
     Create an interactive HTML report for the analysis results.
@@ -388,6 +390,40 @@ def create_html_report(
     spectrograms_b64 = encode_image(output_path / "exported_spectrograms.png")
     
     # Generate HTML content
+    # --- Profile metadata block ---
+    profile_name = None
+    weights = None
+    params = None
+    if profile_params is not None:
+        profile_name = profile_params.get('profile_name', None)
+        weights = profile_params.get('weights', None)
+        params = profile_params
+    # Fallback: try to get from globals if not present
+    if profile_name is None:
+        try:
+            from beamforming_utils.config import get_profile
+            weights, params = get_profile(profile_params.get('profile_name', 'none') if profile_params else 'none')
+            profile_name = profile_params.get('profile_name', 'none') if profile_params else 'none'
+        except Exception:
+            profile_name = 'none'
+
+    # Render profile metadata HTML
+    profile_html = f"""
+    <div class='analysis-params'>
+        <h3>🧭 Geophony Profile Metadata</h3>
+        <div class='param-grid'>
+            <div class='param-item'><strong>Profile:</strong> {profile_name}</div>
+            <div class='param-item'><strong>Weights:</strong> {weights}</div>
+            <div class='param-item'><strong>Params:</strong> ADI_dB={params.get('ADI_dB') if params else ''}, corr={params.get('corr') if params else ''}, min_angle={params.get('min_angle') if params else ''}, hpf={params.get('hpf_hz') if params else ''}, envelope_median_ms={params.get('envelope_median_ms') if params else ''}</div>
+        </div>
+        <div style='margin-top:10px;'>
+    """
+    # Add report_lines (suggestion, provenance, etc)
+    if report_lines:
+        for line in report_lines:
+            profile_html += f"<div style='font-family:monospace;font-size:0.98em;color:#555;'>{line}</div>"
+    profile_html += "</div></div>"
+
     html_content = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -621,6 +657,7 @@ def create_html_report(
             <p>Generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
         </div>
 
+        {profile_html}
         <div class="analysis-params">
             <h3>📊 Analysis Parameters</h3>
             <div class="param-grid">

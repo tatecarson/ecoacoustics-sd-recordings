@@ -340,6 +340,8 @@ def analyze_and_export_best_directions(
             sample_rate,
             non_selected_files if export_all_directions else [],
             individual_spectrograms,
+            profile_params,
+            report_lines,
         )
     
     return exported_files
