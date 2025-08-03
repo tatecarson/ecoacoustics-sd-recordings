@@ -24,7 +24,7 @@ done
 - Each profile's outputs will be in a separate directory (e.g., `out_wind`, `out_rain`, etc.).
 - The `--html_report` flag ensures that an HTML report is generated for each batch.
 
--- ran this and checking results manually --
+-- ran this and checking results manually, added a nice table, need to listen with headphones --
 
 ---
 

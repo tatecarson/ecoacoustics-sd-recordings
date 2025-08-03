@@ -5,7 +5,16 @@
 
 This repository provides a **pragmatic, artist‑oriented pipeline** for steering a 2nd‑order ambisonic recording into many directions (“beams”), computing ecoacoustic indices, ranking beams by a composite uniqueness score, and exporting a diverse, non‑redundant subset for creative soundscape composition and analysis.
 
-It is not a biodiversity survey tool. Instead, it uses ecological signal descriptors (e.g., ACI, ADI, spectral/temporal entropy) to guide creative beam selection—helping you find meaningful spatial perspectives in a complex soundfield for composition and installation work.
+It is not a biodiversity survey t## Selected References and Further Reading
+
+* Pieretti, N., Farina, A., & Morri, D. (2011). A new methodology to infer the singing activity of an avian community: The Acoustic Complexity Index (ACI). *Ecological Indicators*, 11(3), 868-873.
+* Pijanowski, B. C., et al. (2011). Soundscape ecology: principles, patterns, methods and applications. *Landscape Ecology*, 26(9), 1257-1267.
+* Sueur, J., Pavoine, S., Hamerlynck, O., & Duvail, S. (2008). Rapid acoustic survey for biodiversity appraisal. *PLoS ONE*, 3(12), e4065.
+* Towsey, M., et al. (various). Long‑duration eco‑acoustic analyses; index maps for navigation and event discovery.
+* Boelman, N. T., et al. (2007). Multi-trophic invasion resistance in Hawaii: bioacoustics, field surveys, and airborne remote sensing. *Ecological Applications*, 17(8), 2137-2144.
+* Farina, A., et al. (2011). Avian soundscapes and cognitive landscapes: theory, application and ecological perspectives. *Landscape Ecology*, 26(9), 1257-1267.
+* Reviews/Guides: "Guidelines for the use of acoustic indices" (Methods in Ecology & Evolution); ecoacoustic index user guides/tutorials (various).
+* Monacchi, D., & Krause, B. (2017). Ecoacoustics and its Expression through the Voice of the Arts.tead, it uses ecological signal descriptors (e.g., ACI, ADI, spectral/temporal entropy) to guide creative beam selection—helping you find meaningful spatial perspectives in a complex soundfield for composition and installation work.
 
 ---
 
@@ -72,6 +81,37 @@ Profiles reweight the uniqueness score components to emphasize different acousti
 | `surf_river` | 0.10 | **0.30** | 0.10 | 0.20 | **0.30** |
 | `thunder` | 0.05 | 0.05 | **0.40** | 0.15 | **0.35** |
 | `geophony_general` | 0.10 | 0.20 | **0.30** | 0.10 | **0.30** |
+
+### Evidence and Rationale for Profile Weights
+
+The weight choices for each geophony profile are supported by both ecoacoustic literature and the creative aims of this project:
+
+#### 1. **Spectral Activity (Hf)**
+- **Evidence:** Hf (spectral entropy) reflects the evenness of energy across frequencies. Higher Hf means broader spectral spread, useful for distinguishing broadband events (e.g., wind, surf).
+- **Reference:** Sueur et al. (2008): Spectral entropy is used to summarize spectral diversity in ecoacoustic surveys.
+
+#### 2. **Frequency Diversity (ADI)**
+- **Evidence:** ADI quantifies the distribution of energy across frequency bands, highlighting environments with rich frequency content (e.g., rivers, birdsong).
+- **Reference:** Pieretti et al. (2011): ADI is sensitive to the presence of multiple sound sources and is a proxy for biodiversity.
+
+#### 3. **Temporal Complexity (1−Ht)**
+- **Evidence:** 1−Ht (inverted temporal entropy) emphasizes rhythmic or eventful signals (e.g., rain, thunder, wind gusts). Lower Ht (higher temporal complexity) is important for detecting non-steady, structured events.
+- **Reference:** Towsey et al. (various): Temporal entropy is used to distinguish between steady and eventful soundscapes.
+
+#### 4. **Acoustic Complexity (ACI)**
+- **Evidence:** ACI captures frame-to-frame amplitude changes across frequencies, highlighting modulated, articulated signals (e.g., birds, insects, rain).
+- **Reference:** Pieretti, Farina & Morri (2011): ACI is a robust indicator of biotic activity and is widely used in ecoacoustics.
+
+#### 5. **Spatial Uniqueness**
+- **Evidence:** Penalizing beams that are highly correlated with others ensures spatial diversity and reduces redundancy, crucial for both ecological and creative applications.
+- **Rationale:** Combines score-based selection (indices) with redundancy checks (correlation + angular spacing) to ensure distinct beams.
+
+#### 6. **Profile-Specific Weighting Rationale**
+- **Wind:** Emphasizes temporal complexity and spatial uniqueness (wind is broadband and eventful, but often spatially variable).
+- **Rain:** Emphasizes temporal complexity and spatial uniqueness, with some ADI (rain is eventful but can be spectrally narrow).
+- **Surf/River:** High ADI (frequency diversity) and spatial uniqueness (water sounds are broadband and spatially distributed).
+- **Thunder:** High temporal complexity (thunder is eventful, low-frequency).
+- **General:** Balanced weights for mixed environments.
 
 ### CLI Usage
 

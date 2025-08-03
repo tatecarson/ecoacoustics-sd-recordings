@@ -107,6 +107,26 @@ Per input file (nested under output_dir/input_stem/):
 - ecoacoustic_<direction>_<dur>s.wav — exported beams (and optional rejected_ files if --export_all).
 - analysis_report.html — interactive report when --html_report is set.
 
+Profile Comparison Dashboard (profile_comparison_general-geo.html)
+- Purpose: A static, self‑contained dashboard to quickly compare exported audio across geophony profiles for several sound types (general‑geo, none, water‑flow, wind). It helps audition selected directions, view spectrograms, and see compact ecoacoustic indices per beam—supporting rapid qualitative/quantitative comparison of profile behavior.
+- What it shows:
+  - A profile weights legend at the top with explicit numbers for Hf, ADI, 1−Ht, ACI, and Spatial (including the baseline “none”).
+  - For each sound type, a grid of audio players per profile/direction with spectrogram thumbnails.
+  - Inline indices line per audio (ACI, ADI, Hf, Ht, and Total if present) loaded from the run’s CSVs.
+- How indices are loaded:
+  - For each (profile, soundType), it auto‑detects the analysis subfolder by probing for analysis_report.html under:
+    out_<profile>/<soundType>/<candidate>/
+    Candidates include common stems (general‑geo, none, water‑flow, wind), then the soundType label, then the profile name. This resolves layouts like out_rain/wind/wind/.
+  - Prefers maad_indices.csv (exported/selected), falls back to maad_indices_all_directions.csv, and matches the CSV “direction” column to the grid’s direction label.
+- Expected directory structure:
+  - Audio: out_<profile>/<soundType>/ecoacoustic_<direction>_<dur>s.wav
+  - Spectrograms: out_<profile>/<soundType>/spectrograms/…_spectrogram.png
+  - Reports/CSVs (same folder as analysis_report.html): out_<profile>/<soundType>/<input_stem>/maad_indices*.csv
+- Usage:
+  - Generate outputs (e.g., run_profiles.sh). Then open profile_comparison_general-geo.html in a browser. The weights render immediately; indices populate after a brief fetch. If CSVs are missing for a case, the cell shows “Indices: n/a”.
+- Notes:
+  - If you change config profile weights, update the weightsMap constants in the HTML so the legend matches config.
+
 Testing and Validation
 - Lightweight profile registry test:
   pytest tests/test_profiles.py -v
